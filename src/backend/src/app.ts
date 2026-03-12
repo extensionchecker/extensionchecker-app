@@ -6,7 +6,21 @@ import { ALLOWED_PACKAGE_EXTENSIONS, MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_ME
 import { type PackageKind, detectPackageKind, extractManifestFromPackage } from './archive';
 import { resolveExtensionIdToPackage } from './id-resolution';
 import { resolveListingUrlToId } from './listing-url';
-import { validatePublicFetchUrl } from './url-safety';
+import { isSafariAppStoreHost, validatePublicFetchUrl } from './url-safety';
+import {
+  InMemoryRateLimiter,
+  buildRateLimitErrorMessage,
+  buildSecurityConfig,
+  hasValidApiAccessToken,
+  isJsonContentType,
+  isMultipartContentType,
+  isOriginAllowed,
+  mergeSecurityConfig,
+  parseRequestOrigin,
+  resolveClientKey,
+  type BackendSecurityEnv,
+  type SecurityConfigInput
+} from './security';
 
 const AnalyzeRequestSchema = z.object({
   source: z.discriminatedUnion('type', [
@@ -21,6 +35,9 @@ const AnalyzeRequestSchema = z.object({
   ])
 });
 
+const MAX_ANALYZE_REQUEST_BODY_BYTES = 16 * 1024;
+const MAX_UPLOAD_REQUEST_BODY_BYTES = MAX_PACKAGE_SIZE_BYTES + (2 * 1024 * 1024);
+
 type ManifestCandidate = {
   name?: unknown;
   version?: unknown;
@@ -30,6 +47,17 @@ type ManifestCandidate = {
   host_permissions?: unknown;
   content_scripts?: unknown;
   externally_connectable?: unknown;
+};
+
+type AnalyzeSource = { type: 'url'; value: string } | { type: 'id'; value: string };
+type UploadSource = { type: 'file'; filename: string; mimeType: string };
+type ReportSource = AnalyzeSource | UploadSource;
+
+export type CreateAppOptions = {
+  securityConfig?: SecurityConfigInput;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+  env?: BackendSecurityEnv;
 };
 
 const ManifestSchema = z.object({
@@ -61,7 +89,57 @@ function pickPackageKindFromUpload(file: File): PackageKind {
   return detectPackageKind(new URL(`https://upload.local/${encodeURIComponent(safeFilename)}`), file.type);
 }
 
-function buildReportFromManifest(manifestRaw: unknown, source: { type: 'url'; value: string } | { type: 'id'; value: string } | { type: 'file'; filename: string; mimeType: string }) {
+function isLikelyDirectPackageUrl(url: URL): boolean {
+  const path = url.pathname.toLowerCase();
+  if (path.endsWith('.zip') || path.endsWith('.crx') || path.endsWith('.xpi')) {
+    return true;
+  }
+
+  if (url.hostname.toLowerCase() === 'clients2.google.com' && path === '/service/update2/crx') {
+    return true;
+  }
+
+  if (url.hostname.toLowerCase() === 'addons.mozilla.org' && path.includes('/downloads/latest/')) {
+    return true;
+  }
+
+  return false;
+}
+
+function parseContentLength(contentLengthHeader: string | undefined): number | null {
+  if (!contentLengthHeader) {
+    return null;
+  }
+
+  const parsed = Number(contentLengthHeader);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+
+  return Math.floor(parsed);
+}
+
+function exceedsRequestSizeLimit(contentLengthHeader: string | undefined, maxBytes: number): boolean {
+  const contentLength = parseContentLength(contentLengthHeader);
+  if (contentLength === null) {
+    return false;
+  }
+
+  return contentLength > maxBytes;
+}
+
+async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeoutMs: number): Promise<Response> {
+  try {
+    return await fetchImpl(url.toString(), {
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown network error.';
+    throw new Error(`Failed to download extension package: ${message}`);
+  }
+}
+
+function buildReportFromManifest(manifestRaw: unknown, source: ReportSource) {
   const parsedManifest = ManifestSchema.safeParse(manifestRaw);
   if (!parsedManifest.success) {
     return {
@@ -95,13 +173,107 @@ function buildReportFromManifest(manifestRaw: unknown, source: { type: 'url'; va
   };
 }
 
-export function createApp(): Hono {
+export function createApp(options: CreateAppOptions = {}): Hono {
+  const securityConfig = mergeSecurityConfig(buildSecurityConfig(options.env), options.securityConfig);
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const now = options.now ?? (() => Date.now());
+  const rateLimiter = new InMemoryRateLimiter();
   const app = new Hono();
+
+  app.use('*', async (context, next) => {
+    await next();
+
+    context.header('x-content-type-options', 'nosniff');
+    context.header('x-frame-options', 'DENY');
+    context.header('referrer-policy', 'no-referrer');
+    context.header('cross-origin-resource-policy', 'same-origin');
+    context.header('cross-origin-opener-policy', 'same-origin');
+  });
+
+  app.use('/api/*', async (context, next) => {
+    context.header('cache-control', 'no-store');
+
+    const rawOrigin = context.req.header('origin');
+    const parsedOrigin = parseRequestOrigin(rawOrigin);
+    if (rawOrigin && !parsedOrigin) {
+      return context.json({ error: 'Origin header is malformed.' }, 400);
+    }
+
+    const hasConfiguredToken = typeof securityConfig.apiAccessToken === 'string' && securityConfig.apiAccessToken.length > 0;
+    const hasValidToken = hasValidApiAccessToken(context.req.raw.headers, securityConfig.apiAccessToken);
+    const hasTokenBypassForMissingOrigin = hasConfiguredToken && hasValidToken;
+    const requestUrl = new URL(context.req.url);
+    if (parsedOrigin && !isOriginAllowed(parsedOrigin, requestUrl, securityConfig.allowedOrigins)) {
+      return context.json({ error: 'Request origin is not allowed for this API.' }, 403);
+    }
+
+    if (!parsedOrigin && !securityConfig.allowRequestsWithoutOrigin && !hasTokenBypassForMissingOrigin) {
+      return context.json({
+        error: 'Origin header is required for this API. Use the scanner UI or configure API_ALLOW_REQUESTS_WITHOUT_ORIGIN=true for trusted server-to-server usage.'
+      }, 403);
+    }
+
+    if (parsedOrigin) {
+      context.header('access-control-allow-origin', parsedOrigin);
+      context.header('vary', 'Origin');
+      context.header('access-control-allow-methods', 'POST, OPTIONS');
+      context.header('access-control-allow-headers', 'content-type, x-extensionchecker-token');
+      context.header('access-control-max-age', '600');
+    }
+
+    if (context.req.method === 'OPTIONS') {
+      return context.body(null, 204);
+    }
+
+    if (hasConfiguredToken && !hasValidToken) {
+      return context.json({ error: 'Missing or invalid API access token.' }, 401);
+    }
+
+    const rateDecision = rateLimiter.consume(resolveClientKey(context.req.raw.headers), securityConfig, now());
+    if (!rateDecision.ok) {
+      context.header('retry-after', String(rateDecision.retryAfterSeconds));
+      return context.json({ error: buildRateLimitErrorMessage(rateDecision.scope) }, 429);
+    }
+
+    context.header('x-ratelimit-limit-minute-ip', String(securityConfig.rateLimitPerMinutePerIp));
+    context.header('x-ratelimit-remaining-minute-ip', String(rateDecision.remainingPerMinutePerIp));
+    context.header('x-ratelimit-limit-day-ip', String(securityConfig.rateLimitPerDayPerIp));
+    context.header('x-ratelimit-remaining-day-ip', String(rateDecision.remainingPerDayPerIp));
+    context.header('x-ratelimit-limit-day-global', String(securityConfig.rateLimitGlobalPerDay));
+    context.header('x-ratelimit-remaining-day-global', String(rateDecision.remainingGlobalPerDay));
+
+    await next();
+  });
 
   app.get('/health', (context) => context.json({ status: 'ok' }));
 
   app.post('/api/analyze', async (context) => {
-    const body = await context.req.json().catch(() => null);
+    if (!isJsonContentType(context.req.header('content-type'))) {
+      return context.json({ error: 'Content-Type must be application/json.' }, 415);
+    }
+
+    if (exceedsRequestSizeLimit(context.req.header('content-length'), MAX_ANALYZE_REQUEST_BODY_BYTES)) {
+      return context.json({ error: 'Analyze request body is too large.' }, 413);
+    }
+
+    const rawBody = await context.req.text().catch(() => null);
+    if (rawBody === null) {
+      return context.json({ error: 'Invalid request body.' }, 400);
+    }
+
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_ANALYZE_REQUEST_BODY_BYTES) {
+      return context.json({ error: 'Analyze request body is too large.' }, 413);
+    }
+
+    let body: unknown = null;
+    if (rawBody.trim().length > 0) {
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        body = null;
+      }
+    }
+
     const parsedRequest = AnalyzeRequestSchema.safeParse(body);
     if (!parsedRequest.success) {
       return context.json({ error: 'Invalid request body.' }, 400);
@@ -118,6 +290,11 @@ export function createApp(): Hono {
       }
 
       packageUrl = target.url;
+      if (isSafariAppStoreHost(target.url.hostname)) {
+        return context.json({
+          error: 'Safari App Store listing URLs cannot be analyzed directly because Apple does not expose a downloadable extension package from listing pages. Upload an extension archive you obtained separately (for example from developer build artifacts).'
+        }, 400);
+      }
 
       const resolvedIdFromListing = resolveListingUrlToId(target.url);
       if (resolvedIdFromListing) {
@@ -136,6 +313,10 @@ export function createApp(): Hono {
 
         packageUrl = resolvedTarget.url;
         packageKindHint = resolved.packageKind;
+      } else if (!isLikelyDirectPackageUrl(target.url)) {
+        return context.json({
+          error: 'URL must be a supported extension listing or direct package download (.crx, .xpi, .zip). For unsupported sources, upload an extension archive obtained separately.'
+        }, 400);
       }
     } else {
       let resolved;
@@ -159,7 +340,14 @@ export function createApp(): Hono {
       };
     }
 
-    const response = await fetch(packageUrl.toString());
+    let response: Response;
+    try {
+      response = await downloadPackage(packageUrl, fetchImpl, securityConfig.upstreamTimeoutMs);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to download extension package.';
+      return context.json({ error: message }, 502);
+    }
+
     if (!response.ok) {
       return context.json({ error: `Failed to download extension package (${response.status}).` }, 400);
     }
@@ -196,6 +384,14 @@ export function createApp(): Hono {
   });
 
   app.post('/api/analyze/upload', async (context) => {
+    if (!isMultipartContentType(context.req.header('content-type'))) {
+      return context.json({ error: 'Content-Type must be multipart/form-data for uploads.' }, 415);
+    }
+
+    if (exceedsRequestSizeLimit(context.req.header('content-length'), MAX_UPLOAD_REQUEST_BODY_BYTES)) {
+      return context.json({ error: `Upload request exceeds ${MAX_PACKAGE_SIZE_MEGABYTES} MB limit.` }, 413);
+    }
+
     const formData = await context.req.raw.formData().catch(() => null);
     const uploaded = formData?.get('file');
 

@@ -1,7 +1,8 @@
 import type { PackageKind } from './archive';
 
 const CHROME_EXTENSION_ID_REGEX = /^[a-p]{32}$/;
-const SOURCE_PREFIX_REGEX = /^(?<ecosystem>chrome|firefox):(?<rawId>.+)$/i;
+const SOURCE_PREFIX_REGEX = /^(?<ecosystem>chrome|firefox|safari):(?<rawId>.+)$/i;
+const SAFARI_APP_STORE_ID_REGEX = /^id\d{6,}$/i;
 
 export type ResolvedExtensionId = {
   canonicalId: string;
@@ -61,11 +62,19 @@ export function resolveExtensionIdToPackage(rawInput: string): ResolvedExtension
       return resolveChromeId(rawId);
     }
 
+    if (ecosystem.toLowerCase() === 'safari') {
+      throw new Error('Safari extension IDs are not resolvable via store API. Upload an extension archive obtained separately (for example from developer build artifacts).');
+    }
+
     return resolveFirefoxId(rawId);
   }
 
   if (CHROME_EXTENSION_ID_REGEX.test(input.toLowerCase())) {
     return resolveChromeId(input);
+  }
+
+  if (SAFARI_APP_STORE_ID_REGEX.test(input)) {
+    throw new Error('Safari App Store IDs are not resolvable as extension packages. Upload an extension archive obtained separately (for example from developer build artifacts).');
   }
 
   return resolveFirefoxId(input);

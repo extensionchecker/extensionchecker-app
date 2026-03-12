@@ -6,6 +6,24 @@ const PRIVATE_IPV4_RANGES = [
   { start: [192, 168, 0, 0], end: [192, 168, 255, 255] }
 ] as const;
 
+const ALLOWED_SUBMISSION_HOSTS = new Set([
+  'chromewebstore.google.com',
+  'chrome.google.com',
+  'clients2.google.com',
+  'addons.mozilla.org',
+  'apps.apple.com',
+  'itunes.apple.com'
+]);
+
+export function isAllowedSubmissionHost(hostname: string): boolean {
+  return ALLOWED_SUBMISSION_HOSTS.has(hostname.toLowerCase());
+}
+
+export function isSafariAppStoreHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === 'apps.apple.com' || normalized === 'itunes.apple.com';
+}
+
 function ipv4PartsToInt(parts: readonly number[]): number {
   const [a, b, c, d] = parts;
   if (a === undefined || b === undefined || c === undefined || d === undefined) {
@@ -56,6 +74,13 @@ export function validatePublicFetchUrl(rawUrl: string): { ok: true; url: URL } |
 
   if (isPrivateIPv4(hostname) || isPrivateIPv6(hostname)) {
     return { ok: false, reason: 'Private or loopback IP targets are not allowed.' };
+  }
+
+  if (!isAllowedSubmissionHost(hostname)) {
+    return {
+      ok: false,
+      reason: 'Unsupported URL domain. Use a Chrome Web Store URL, Firefox Add-ons URL, or upload a package file.'
+    };
   }
 
   return { ok: true, url: parsedUrl };

@@ -21,4 +21,12 @@ describe('resolveExtensionIdToPackage', () => {
   it('rejects malformed chrome prefix IDs', () => {
     expect(() => resolveExtensionIdToPackage('chrome:not-valid')).toThrowError(/32 characters/);
   });
+
+  it('rejects safari ids with actionable guidance', () => {
+    expect(() => resolveExtensionIdToPackage('safari:1password')).toThrowError(/obtained separately/);
+  });
+
+  it('rejects raw safari app-store style ids with actionable guidance', () => {
+    expect(() => resolveExtensionIdToPackage('id1569813296')).toThrowError(/Safari App Store IDs/);
+  });
 });

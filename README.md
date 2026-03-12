@@ -55,3 +55,7 @@ Listing-page URL resolution is planned next.
 - Localhost, local domains, loopback, and private IP literals are rejected.
 - Package size is capped to reduce abuse and memory risk.
 - Archive parsing is performed in memory without filesystem extraction.
+- API requests require an `Origin` header by default, and only same-origin or configured origins are accepted.
+- Non-browser/server callers can opt in via `API_ALLOW_REQUESTS_WITHOUT_ORIGIN=true` (recommended only for trusted private networks).
+- Optional API token enforcement is supported with `API_ACCESS_TOKEN` (header: `x-extensionchecker-token`).
+- Backend rate limits are enabled by default with configurable per-minute IP, per-day IP, and global per-day quotas.

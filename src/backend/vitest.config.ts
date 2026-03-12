@@ -14,11 +14,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
+      include: ['src/**/*.ts'],
+      exclude: ['src/index.ts', 'src/worker.ts'],
       thresholds: {
-        lines: 75,
-        functions: 75,
-        branches: 75,
-        statements: 75
+        lines: 85,
+        functions: 85,
+        branches: 80,
+        statements: 85
       }
     }
   }

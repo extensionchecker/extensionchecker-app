@@ -1,3 +1,20 @@
 name = "extensionchecker-backend"
 main = "src/worker.ts"
 compatibility_date = "2026-03-11"
+
+[vars]
+# Comma-separated absolute origins allowed to call /api/* cross-origin.
+# Same-origin requests are always permitted.
+# API_ALLOWED_ORIGINS = "https://extensionchecker.org"
+#
+# Optional shared secret for API requests. If set, callers must provide
+# header: x-extensionchecker-token.
+# API_ACCESS_TOKEN = "replace-me"
+#
+# Set true only for trusted server-to-server environments.
+# API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
+#
+# Defaults are conservative and can be tuned per deployment:
+# API_RATE_LIMIT_PER_MINUTE_PER_IP = "30"
+# API_RATE_LIMIT_PER_DAY_PER_IP = "2000"
+# API_RATE_LIMIT_GLOBAL_PER_DAY = "90000"

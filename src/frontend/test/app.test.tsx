@@ -1,13 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
+
+beforeEach(() => {
+  globalThis.history.replaceState(null, '', '/');
+});
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
 });
 
-function buildReport(source: { type: 'url'; value: string } | { type: 'id'; value: string }) {
+function buildReport(source: { type: 'url'; value: string } | { type: 'id'; value: string } | { type: 'file'; filename: string; mimeType: string }) {
   return {
     reportVersion: '1.0.0',
     analyzedAt: '2026-03-11T00:00:00.000Z',
@@ -37,6 +41,27 @@ function buildReport(source: { type: 'url'; value: string } | { type: 'id'; valu
 }
 
 describe('App', () => {
+  it('shows URL source guidance and Safari listing hint in URL mode', async () => {
+    render(<App />);
+
+    expect(screen.getByText(/Supported URL sources:/)).toBeInTheDocument();
+
+    const input = screen.getByLabelText('Extension package URL');
+    fireEvent.change(input, { target: { value: 'https://apps.apple.com/us/app/1password-password-manager/id1511601750' } });
+
+    expect(screen.getByText(/Safari listing detected/)).toBeInTheDocument();
+  });
+
+  it('shows Safari ID guidance and disables submit in ID mode', async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Input mode'), { target: { value: 'id' } });
+    fireEvent.change(screen.getByLabelText('Extension ID'), { target: { value: 'id1569813296' } });
+
+    expect(screen.getByText(/Safari App Store IDs are not supported in Extension ID mode/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+  });
+
   it('submits URL and renders report summary', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify(buildReport({
       type: 'url',
@@ -52,7 +77,7 @@ describe('App', () => {
 
     const input = screen.getByLabelText('Extension package URL');
     fireEvent.change(input, { target: { value: 'https://example.com/extension.zip' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze URL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
     await waitFor(() => {
       expect(screen.getByText('UI Test Extension')).toBeInTheDocument();
@@ -75,7 +100,7 @@ describe('App', () => {
 
     fireEvent.change(screen.getByLabelText('Input mode'), { target: { value: 'id' } });
     fireEvent.change(screen.getByLabelText('Extension ID'), { target: { value: 'abcdefghijklmnopabcdefghijklmnop' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze ID' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
     await waitFor(() => {
       expect(screen.getByText('UI Test Extension')).toBeInTheDocument();
@@ -97,7 +122,7 @@ describe('App', () => {
 
     const input = screen.getByLabelText('Extension package URL');
     fireEvent.change(input, { target: { value: 'https://example.com/extension.zip' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze URL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
     await waitFor(() => {
       expect(screen.getByText('Backend request failed with status 502.')).toBeInTheDocument();

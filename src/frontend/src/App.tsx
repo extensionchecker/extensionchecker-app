@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import type { AnalysisReport, RiskSignal, Severity } from '@extensionchecker/shared';
 import { analyzeExtensionById, analyzeExtensionByUpload, analyzeExtensionByUrl } from './api';
+import { buildPermissionDetails } from './permission-explainer';
+import { resolveExtensionDisplayName } from './report-display';
 
 type ThemePreference = 'system' | 'light' | 'dark';
 type SubmissionMode = 'url' | 'id' | 'file';
+type ResultTab = 'overview' | 'findings' | 'phases';
+type PhaseStatus = 'complete' | 'not-available';
 type Tone = 'info' | 'good' | 'caution' | 'danger';
+type AppRoute = 'scan' | 'results';
+const THEME_ORDER: ThemePreference[] = ['system', 'light', 'dark'];
+const CHROME_EXTENSION_ID_REGEX = /^[a-p]{32}$/;
+const SAFARI_APP_STORE_ID_REGEX = /^id\d{6,}$/i;
 const SEVERITY_ORDER: Record<Severity, number> = {
   critical: 0,
   high: 1,
@@ -84,8 +92,122 @@ function verdictExplanation(report: AnalysisReport): string {
   return 'No high-impact manifest combinations were detected in this static manifest-first analysis.';
 }
 
-function displayName(report: AnalysisReport): string {
-  return report.metadata.name.startsWith('__MSG_') ? 'Localized extension name (unresolved in package)' : report.metadata.name;
+function sourceStoreLabel(report: AnalysisReport): string {
+  if (report.source.type === 'file') {
+    return 'Uploaded package';
+  }
+
+  const value = report.source.value;
+
+  if (report.source.type === 'id') {
+    if (value.startsWith('chrome:') || /^[a-p]{32}$/.test(value)) {
+      return 'Chrome Web Store';
+    }
+
+    if (value.startsWith('firefox:')) {
+      return 'Firefox Add-ons';
+    }
+
+    if (value.startsWith('safari:')) {
+      return 'Safari Extensions';
+    }
+
+    return 'Extension ID';
+  }
+
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+
+    if (host.includes('chromewebstore.google.com') || host.includes('chrome.google.com') || host.includes('clients2.google.com')) {
+      return 'Chrome Web Store';
+    }
+
+    if (host.includes('addons.mozilla.org')) {
+      return 'Firefox Add-ons';
+    }
+
+    if (host.includes('safari') || host.includes('apple.com')) {
+      return 'Safari Extensions';
+    }
+  } catch {
+    return 'Unknown store';
+  }
+
+  return 'Unknown store';
+}
+
+function sourceListingUrl(report: AnalysisReport): string | null {
+  if (report.source.type === 'url') {
+    try {
+      const parsed = new URL(report.source.value);
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        return parsed.toString();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (report.source.type === 'id') {
+    const raw = report.source.value.trim();
+
+    if (/^[a-p]{32}$/.test(raw)) {
+      return `https://chromewebstore.google.com/detail/${raw}`;
+    }
+
+    if (raw.startsWith('chrome:')) {
+      const id = raw.replace(/^chrome:/, '');
+      if (/^[a-p]{32}$/.test(id)) {
+        return `https://chromewebstore.google.com/detail/${id}`;
+      }
+      return null;
+    }
+
+    if (raw.startsWith('firefox:')) {
+      const addOnId = raw.replace(/^firefox:/, '');
+      return addOnId ? `https://addons.mozilla.org/firefox/addon/${encodeURIComponent(addOnId)}/` : null;
+    }
+  }
+
+  return null;
+}
+
+function isLikelySafariExtensionId(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (/^safari:/i.test(trimmed)) {
+    return true;
+  }
+
+  return SAFARI_APP_STORE_ID_REGEX.test(trimmed);
+}
+
+function looksLikeValidChromeId(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (/^chrome:/i.test(trimmed)) {
+    return CHROME_EXTENSION_ID_REGEX.test(trimmed.replace(/^chrome:/i, ''));
+  }
+
+  return CHROME_EXTENSION_ID_REGEX.test(trimmed);
+}
+
+function isSafariStoreInputUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    return host === 'apps.apple.com' || host === 'itunes.apple.com';
+  } catch {
+    return false;
+  }
 }
 
 function explainSignalImpact(signal: RiskSignal): string {
@@ -114,6 +236,34 @@ function iconForTone(tone: Tone): string {
   }
 
   return 'info';
+}
+
+function iconForTheme(theme: ThemePreference): string {
+  if (theme === 'light') {
+    return 'light_mode';
+  }
+
+  if (theme === 'dark') {
+    return 'dark_mode';
+  }
+
+  return 'computer';
+}
+
+function phaseTone(status: PhaseStatus): Tone {
+  return status === 'complete' ? 'good' : 'caution';
+}
+
+function phaseIcon(status: PhaseStatus): string {
+  return status === 'complete' ? 'check_circle' : 'pending';
+}
+
+function phaseStatusLabel(status: PhaseStatus): string {
+  return status === 'complete' ? 'Complete' : 'Not Available';
+}
+
+function routeFromPath(pathname: string): AppRoute {
+  return pathname.startsWith('/results') ? 'results' : 'scan';
 }
 
 function useThemePreference(): [ThemePreference, (nextTheme: ThemePreference) => void] {
@@ -157,8 +307,30 @@ export function App(): JSX.Element {
   const [extensionId, setExtensionId] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [report, setReport] = useState<AnalysisReport | null>(null);
+  const [route, setRoute] = useState<AppRoute>(() => routeFromPath(globalThis.location?.pathname ?? '/'));
+  const [activeTab, setActiveTab] = useState<ResultTab>('overview');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const safariIdHint = useMemo(() => (mode === 'id' ? isLikelySafariExtensionId(extensionId) : false), [mode, extensionId]);
+  const chromeIdFormatHint = useMemo(() => {
+    if (mode !== 'id') {
+      return false;
+    }
+
+    const trimmed = extensionId.trim();
+    if (!trimmed || safariIdHint) {
+      return false;
+    }
+
+    const prefixed = /^(chrome|firefox|safari):/i.test(trimmed);
+    const maybeChromeCandidate = /^[a-z]+$/i.test(trimmed) && trimmed.length >= 16;
+    if (prefixed || !maybeChromeCandidate) {
+      return false;
+    }
+
+    return !looksLikeValidChromeId(trimmed);
+  }, [mode, extensionId, safariIdHint]);
 
   const canSubmit = useMemo(() => {
     if (mode === 'url') {
@@ -171,7 +343,7 @@ export function App(): JSX.Element {
     }
 
     if (mode === 'id') {
-      return extensionId.trim().length > 0;
+      return extensionId.trim().length > 0 && !isLikelySafariExtensionId(extensionId);
     }
 
     return uploadFile !== null;
@@ -192,7 +364,87 @@ export function App(): JSX.Element {
     });
   }, [report]);
 
-  const submit = async (event: FormEvent): Promise<void> => {
+  const phases = useMemo(() => {
+    if (!report) {
+      return [];
+    }
+
+    const codePhaseStatus: PhaseStatus = report.limits.codeExecutionAnalysisPerformed ? 'complete' : 'not-available';
+
+    return [
+      {
+        id: 'manifest',
+        title: 'Phase 1: Manifest Analysis',
+        status: 'complete' as const,
+        detail: 'Complete. Parsed manifest metadata, permissions, host access, and manifest-declared capability combinations.'
+      },
+      {
+        id: 'code',
+        title: 'Phase 2: Code Analysis',
+        status: codePhaseStatus,
+        detail: codePhaseStatus === 'complete'
+          ? 'Complete. Source and behavior-level analysis was executed.'
+          : 'Not available in this version. Deep semantic code review and runtime behavior detonation were not performed.'
+      }
+    ];
+  }, [report]);
+
+  const permissionDetails = useMemo(() => {
+    if (!report) {
+      return [];
+    }
+
+    return buildPermissionDetails(report);
+  }, [report]);
+  const listingUrl = useMemo(() => (report ? sourceListingUrl(report) : null), [report]);
+  const safariUrlHint = useMemo(() => (mode === 'url' ? isSafariStoreInputUrl(url) : false), [mode, url]);
+
+  useEffect(() => {
+    const onPopState = (): void => {
+      setRoute(routeFromPath(globalThis.location?.pathname ?? '/'));
+    };
+
+    globalThis.addEventListener('popstate', onPopState);
+    return () => globalThis.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const navigateTo = useCallback((nextRoute: AppRoute, options?: { query?: URLSearchParams; replace?: boolean }) => {
+    const basePath = nextRoute === 'results' ? '/results' : '/';
+    const query = options?.query?.toString();
+    const nextPath = query ? `${basePath}?${query}` : basePath;
+    const currentPath = `${globalThis.location?.pathname ?? '/'}${globalThis.location?.search ?? ''}`;
+
+    if (currentPath !== nextPath) {
+      if (options?.replace) {
+        globalThis.history?.replaceState(null, '', nextPath);
+      } else {
+        globalThis.history?.pushState(null, '', nextPath);
+      }
+    }
+
+    setRoute(nextRoute);
+  }, []);
+
+  const resultsQuery = useCallback((): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (mode === 'url' && url.trim()) {
+      params.set('extensionUrl', url.trim());
+      return params;
+    }
+
+    if (mode === 'id' && extensionId.trim()) {
+      params.set('extensionId', extensionId.trim());
+      return params;
+    }
+
+    if (mode === 'file' && uploadFile?.name) {
+      params.set('filename', uploadFile.name);
+    }
+
+    return params;
+  }, [extensionId, mode, uploadFile?.name, url]);
+
+  const submit = useCallback(async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     if (!canSubmit) {
       return;
@@ -209,15 +461,41 @@ export function App(): JSX.Element {
           : await analyzeExtensionByUpload(uploadFile as File);
 
       setReport(nextReport);
+      setActiveTab('overview');
+      navigateTo('results', { query: resultsQuery() });
     } catch (submitError) {
       setReport(null);
       setError(submitError instanceof Error ? submitError.message : 'Unexpected error');
     } finally {
       setIsSubmitting(false);
     }
+  }, [canSubmit, extensionId, mode, navigateTo, resultsQuery, uploadFile, url]);
+
+  const currentThemeIndex = Math.max(0, THEME_ORDER.indexOf(theme));
+  const nextTheme: ThemePreference = THEME_ORDER[(currentThemeIndex + 1) % THEME_ORDER.length] ?? 'system';
+
+  const exportPdf = async (): Promise<void> => {
+    if (!report || isExportingPdf) {
+      return;
+    }
+
+    setIsExportingPdf(true);
+    try {
+      const { downloadReportPdf } = await import('./pdf-report');
+      await downloadReportPdf(report);
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : 'Failed to generate PDF report.');
+    } finally {
+      setIsExportingPdf(false);
+    }
   };
 
-  const submitLabel = mode === 'url' ? 'Analyze URL' : mode === 'id' ? 'Analyze ID' : 'Analyze Upload';
+  const openScanner = (): void => {
+    navigateTo('scan');
+    globalThis.requestAnimationFrame?.(() => {
+      globalThis.document?.getElementById('analysis-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
 
   return (
     <main className="page">
@@ -227,178 +505,374 @@ export function App(): JSX.Element {
             <img src="/brand-icon.svg" alt="ExtensionChecker logo" className="brand-icon" />
             <h1>ExtensionChecker</h1>
           </div>
-          <div className="theme">
-            <label htmlFor="theme">Theme</label>
-            <select id="theme" value={theme} onChange={(event) => setTheme(event.target.value as ThemePreference)}>
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </div>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setTheme(nextTheme)}
+            aria-label={`Theme: ${theme}. Switch to ${nextTheme}.`}
+            title={`Theme: ${theme}. Switch to ${nextTheme}.`}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">{iconForTheme(theme)}</span>
+          </button>
         </header>
 
-        <p className="description">Analyze browser extensions by package URL, store listing URL, extension ID, or uploaded package file.</p>
+        {route === 'scan' ? (
+          <section id="analysis-intake" className="intake">
+            <div className="intake-head">
+              <div className="intake-copy">
+                <p className="intake-label">Input</p>
+                <p className="description">Analyze browser extensions by package URL, store listing URL, extension ID, or uploaded package file.</p>
+              </div>
+            </div>
 
-        <form onSubmit={submit} className="form">
-          <label htmlFor="mode">Input mode</label>
-          <select
-            id="mode"
-            value={mode}
-            onChange={(event) => {
-              setMode(event.target.value as SubmissionMode);
-              setError(null);
-            }}
-          >
-            <option value="url">Package URL</option>
-            <option value="id">Extension ID</option>
-            <option value="file">Package Upload</option>
-          </select>
-
-          {mode === 'url' ? (
-            <>
-              <label htmlFor="url">Extension package URL</label>
-              <input
-                id="url"
-                type="url"
-                placeholder="https://example.com/extension.zip"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                required
-              />
-            </>
-          ) : null}
-
-          {mode === 'id' ? (
-            <>
-              <label htmlFor="extension-id">Extension ID</label>
-              <input
-                id="extension-id"
-                type="text"
-                placeholder="chrome:abcdefghijklmnopabcdefghijklmnop"
-                value={extensionId}
-                onChange={(event) => setExtensionId(event.target.value)}
-                required
-              />
-            </>
-          ) : null}
-
-          {mode === 'file' ? (
-            <>
-              <label htmlFor="package-file">Extension package file</label>
-              <input
-                id="package-file"
-                type="file"
-                accept=".zip,.xpi,.crx"
-                onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-                required
-              />
-            </>
-          ) : null}
-
-          <button type="submit" disabled={!canSubmit || isSubmitting} aria-busy={isSubmitting}>
-            <span className="button-content">
-              {isSubmitting ? (
-                <span className="button-loading">
-                  <span className="button-spinner" aria-hidden="true" />
-                  Analyzing...
-                </span>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined button-icon" aria-hidden="true">search</span>
-                  {submitLabel}
-                </>
-              )}
-            </span>
-          </button>
-        </form>
-
-        {error ? <p className="error">{error}</p> : null}
-
-        {report ? (
-          <section className="report" aria-live="polite">
-            <div className={`verdict verdict-${toneForSeverity(report.score.severity)}`}>
-              <div
-                className="score-donut"
-                style={{
-                  ['--score' as string]: report.score.value,
-                  ['--score-color' as string]: scoreColor(report.score.value)
+            <form onSubmit={submit} className="form">
+              <label htmlFor="mode">Input mode</label>
+              <select
+                id="mode"
+                value={mode}
+                onChange={(event) => {
+                  setMode(event.target.value as SubmissionMode);
+                  setError(null);
                 }}
               >
-                <div className="score-donut-inner">
-                  <strong>{report.score.value}</strong>
-                  <span>/100</span>
-                </div>
-                <div className="score-band">{scoreBand(report.score.value)}</div>
-              </div>
+                <option value="url">Package URL</option>
+                <option value="id">Extension ID</option>
+                <option value="file">Package Upload</option>
+              </select>
 
-              <div className="verdict-main">
-                <p className="verdict-label">Overall Verdict</p>
-                <h2>
-                  <span className={`material-symbols-outlined tone-icon ${toneForSeverity(report.score.severity)}`} aria-hidden="true">
-                    {iconForTone(toneForSeverity(report.score.severity))}
-                  </span>
-                  {verdictLabel(report)}
-                </h2>
-                <p className="verdict-score">
-                  Risk score <strong>{report.score.value}/100</strong> ({report.score.severity})
-                </p>
-                <p>{verdictExplanation(report)}</p>
-              </div>
-            </div>
+              {mode === 'url' ? (
+                <>
+                  <label htmlFor="url">Extension package URL</label>
+                  <input
+                    id="url"
+                    type="url"
+                    placeholder="https://chromewebstore.google.com/detail/... or https://addons.mozilla.org/firefox/addon/..."
+                    value={url}
+                    onChange={(event) => setUrl(event.target.value)}
+                    required
+                  />
+                  <p className="field-hint">
+                    Supported URL sources: <code>chromewebstore.google.com</code>, <code>chrome.google.com</code>, <code>clients2.google.com</code>, and <code>addons.mozilla.org</code>.
+                    Safari App Store pages (<code>apps.apple.com</code>) cannot be analyzed directly from URL because Apple does not expose extension package downloads from listings.
+                  </p>
+                  {safariUrlHint ? (
+                    <p className="field-hint warning">
+                      Safari listing detected. Use <strong>Package Upload</strong> only if you already have a separate extension archive (for example from developer build artifacts).
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
 
-            <div className="meta-grid">
-              <article className="info-card info">
-                <h3>Extension</h3>
-                <p><strong>{displayName(report)}</strong></p>
-                <p>Version {report.metadata.version} (MV{report.metadata.manifestVersion})</p>
-              </article>
-              <article className="info-card good">
-                <h3>Declared Permissions</h3>
-                <p>{report.permissions.requestedPermissions.length} requested</p>
-                <p>{report.permissions.hostPermissions.length} host scopes</p>
-              </article>
-              <article className="info-card caution">
-                <h3>Review Signals</h3>
-                <p>{report.riskSignals.length} risk signals detected</p>
-                <p>{report.summary}</p>
-              </article>
-            </div>
+              {mode === 'id' ? (
+                <>
+                  <label htmlFor="extension-id">Extension ID</label>
+                  <input
+                    id="extension-id"
+                    type="text"
+                    placeholder="chrome:abcdefghijklmnopabcdefghijklmnop"
+                    value={extensionId}
+                    onChange={(event) => setExtensionId(event.target.value)}
+                    required
+                  />
+                  <p className="field-hint">
+                    Chrome IDs must be 32 characters using letters <code>a</code>-<code>p</code>. Firefox supports add-on slugs or <code>firefox:&lt;id&gt;</code>.
+                  </p>
+                  {chromeIdFormatHint ? (
+                    <p className="field-hint warning">
+                      This looks like a Chrome-style ID, but the format is invalid. Use a 32-character ID with letters a-p.
+                    </p>
+                  ) : null}
+                  {safariIdHint ? (
+                    <p className="field-hint warning">
+                      Safari App Store IDs are not supported in Extension ID mode. Use <strong>Package Upload</strong> only with an extension archive you already obtained separately.
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
 
-            <section className="signals">
-              <h3>Why This Extension May Be Risky</h3>
-              {sortedSignals.length === 0 ? (
-                <p className="empty-signals">No specific high-impact risk signals were detected from manifest declarations.</p>
-              ) : (
-                <ul className="signal-list">
-                  {sortedSignals.map((signal) => (
-                    <li key={signal.id} className={`signal severity-${signal.severity}`}>
-                      <div className="signal-header">
-                        <strong>
-                          <span className={`material-symbols-outlined signal-icon severity-${signal.severity}`} aria-hidden="true">
-                            {signal.severity === 'low' ? 'check_circle' : signal.severity === 'medium' ? 'warning' : 'cancel'}
-                          </span>
-                          {signal.title}
-                        </strong>
-                        <span className={`severity-pill severity-${signal.severity}`}>{signal.severity}</span>
-                      </div>
-                      <p>{signal.description}</p>
-                      <p className="signal-impact">{explainSignalImpact(signal)}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+              {mode === 'file' ? (
+                <>
+                  <label htmlFor="package-file">Extension package file</label>
+                  <input
+                    id="package-file"
+                    type="file"
+                    accept=".zip,.xpi,.crx"
+                    onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
+                    required
+                  />
+                </>
+              ) : null}
 
-            <section className="limits info-card info">
-              <h3>Analysis Scope</h3>
-              <p>This result is manifest-first, not full runtime malware detonation.</p>
-              <ul>
-                {report.limits.notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </section>
+              <button type="submit" disabled={!canSubmit || isSubmitting} aria-busy={isSubmitting}>
+                <span className="button-content">
+                  {isSubmitting ? (
+                    <span className="button-loading">
+                      <span className="button-spinner" aria-hidden="true" />
+                      Analyzing...
+                    </span>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined button-icon" aria-hidden="true">search</span>
+                      Analyze
+                    </>
+                  )}
+                </span>
+              </button>
+            </form>
+            {error ? <p className="error">{error}</p> : null}
           </section>
+        ) : null}
+
+        {route === 'results' ? (
+          report ? (
+          <section className="report" aria-live="polite">
+            <div className="results-nav">
+              <button type="button" className="results-nav-link" onClick={openScanner}>
+                <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
+                Back to Scanner
+              </button>
+            </div>
+
+            <div className="report-topbar">
+              <section className="extension-identity" aria-label="Analyzed extension metadata">
+                <div className="extension-identity-head">
+                  <p className="extension-identity-label">Analyzed Extension</p>
+                  <div className="report-tools">
+                    <button
+                      type="button"
+                      className="report-tool-icon-button"
+                      onClick={exportPdf}
+                      disabled={isExportingPdf}
+                      title={isExportingPdf ? 'Preparing PDF report' : 'Download PDF report'}
+                      aria-label={isExportingPdf ? 'Preparing PDF report' : 'Download PDF report'}
+                    >
+                      <span className="material-symbols-outlined" aria-hidden="true">
+                        {isExportingPdf ? 'progress_activity' : 'download'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                <h2 className="extension-identity-name">{resolveExtensionDisplayName(report)}</h2>
+                <div className="extension-identity-meta">
+                  <p className="extension-identity-version">
+                    <span className="material-symbols-outlined" aria-hidden="true">deployed_code</span>
+                    Version {report.metadata.version} (MV{report.metadata.manifestVersion})
+                  </p>
+                  {listingUrl ? (
+                    <a
+                      className="extension-identity-store"
+                      href={listingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open extension listing"
+                    >
+                      <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                      {sourceStoreLabel(report)}
+                    </a>
+                  ) : (
+                    <p className="extension-identity-store">
+                      <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                      {sourceStoreLabel(report)}
+                    </p>
+                  )}
+                </div>
+              </section>
+            </div>
+
+            <nav className="result-tabs" role="tablist" aria-label="Analysis sections">
+              <button
+                type="button"
+                role="tab"
+                id="result-tab-overview"
+                aria-selected={activeTab === 'overview'}
+                aria-controls="result-panel-overview"
+                className={`result-tab ${activeTab === 'overview' ? 'active' : ''}`}
+                onClick={() => setActiveTab('overview')}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">dashboard</span>
+                <span className="result-tab-label">Overview</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="result-tab-findings"
+                aria-selected={activeTab === 'findings'}
+                aria-controls="result-panel-findings"
+                className={`result-tab ${activeTab === 'findings' ? 'active' : ''}`}
+                onClick={() => setActiveTab('findings')}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">warning</span>
+                <span className="result-tab-label">Findings</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="result-tab-phases"
+                aria-selected={activeTab === 'phases'}
+                aria-controls="result-panel-phases"
+                className={`result-tab ${activeTab === 'phases' ? 'active' : ''}`}
+                onClick={() => setActiveTab('phases')}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">account_tree</span>
+                <span className="result-tab-label">Phases</span>
+              </button>
+            </nav>
+
+            {activeTab === 'overview' ? (
+              <section id="result-panel-overview" role="tabpanel" aria-labelledby="result-tab-overview" className="result-panel">
+                <div className={`verdict verdict-${toneForSeverity(report.score.severity)}`}>
+                  <div
+                    className="score-donut"
+                    style={{
+                      ['--score' as string]: report.score.value,
+                      ['--score-color' as string]: scoreColor(report.score.value)
+                    }}
+                  >
+                    <div className="score-donut-inner">
+                      <strong>{report.score.value}</strong>
+                      <span>/100</span>
+                    </div>
+                    <div className="score-band">{scoreBand(report.score.value)}</div>
+                  </div>
+
+                  <div className="verdict-main">
+                    <p className="verdict-label">Overall Verdict</p>
+                    <h2>
+                      <span className={`material-symbols-outlined tone-icon ${toneForSeverity(report.score.severity)}`} aria-hidden="true">
+                        {iconForTone(toneForSeverity(report.score.severity))}
+                      </span>
+                      {verdictLabel(report)}
+                    </h2>
+                    <p className="verdict-score">
+                      Risk score <strong>{report.score.value}/100</strong> ({report.score.severity})
+                    </p>
+                    <p>{verdictExplanation(report)}</p>
+                  </div>
+                </div>
+
+                <div className="meta-grid">
+                  <article className="info-card info">
+                    <h3>Submission Source</h3>
+                    {listingUrl ? (
+                      <p>
+                        <strong>
+                          <a className="source-link" href={listingUrl} target="_blank" rel="noopener noreferrer">
+                            {sourceStoreLabel(report)}
+                          </a>
+                        </strong>
+                      </p>
+                    ) : (
+                      <p><strong>{sourceStoreLabel(report)}</strong></p>
+                    )}
+                    <p className="source-value">{report.source.type === 'file' ? report.source.filename : report.source.value}</p>
+                  </article>
+                  <article className="info-card good">
+                    <h3>Declared Permissions</h3>
+                    <p>{report.permissions.requestedPermissions.length} requested</p>
+                    <p>{report.permissions.optionalPermissions.length} optional</p>
+                    <p>{report.permissions.hostPermissions.length} host scopes</p>
+                  </article>
+                  <article className="info-card caution">
+                    <h3>Review Signals</h3>
+                    <p>{report.riskSignals.length} risk signals detected</p>
+                    <p>{report.summary}</p>
+                  </article>
+                </div>
+
+                <section className="permissions-section">
+                  <h3>Declared Permissions and Access</h3>
+                  {permissionDetails.length === 0 ? (
+                    <p className="empty-signals">No declared permissions or host scopes were found.</p>
+                  ) : (
+                    <ul className="permission-list">
+                      {permissionDetails.map((entry) => (
+                        <li key={entry.id} className={`permission-entry severity-${entry.severity}`}>
+                          <div className="permission-entry-head">
+                            <strong>{entry.permission}</strong>
+                            <div className="permission-entry-tags">
+                              <span className="source-pill">{entry.sourceLabel}</span>
+                              <span className={`severity-pill severity-${entry.severity}`}>{entry.severity}</span>
+                            </div>
+                          </div>
+                          <p>{entry.explanation}</p>
+                          <p className="permission-danger">{entry.danger}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </section>
+            ) : null}
+
+            {activeTab === 'findings' ? (
+              <section id="result-panel-findings" role="tabpanel" aria-labelledby="result-tab-findings" className="result-panel">
+                <section className="signals">
+                  <h3>Why This Extension May Be Risky</h3>
+                  {sortedSignals.length === 0 ? (
+                    <p className="empty-signals">No specific high-impact risk signals were detected from manifest declarations.</p>
+                  ) : (
+                    <ul className="signal-list">
+                      {sortedSignals.map((signal) => (
+                        <li key={signal.id} className={`signal severity-${signal.severity}`}>
+                          <div className="signal-header">
+                            <strong>
+                              <span className={`material-symbols-outlined signal-icon severity-${signal.severity}`} aria-hidden="true">
+                                {signal.severity === 'low' ? 'check_circle' : signal.severity === 'medium' ? 'warning' : 'cancel'}
+                              </span>
+                              {signal.title}
+                            </strong>
+                            <span className={`severity-pill severity-${signal.severity}`}>{signal.severity}</span>
+                          </div>
+                          <p>{signal.description}</p>
+                          <p className="signal-impact">{explainSignalImpact(signal)}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              </section>
+            ) : null}
+
+            {activeTab === 'phases' ? (
+              <section id="result-panel-phases" role="tabpanel" aria-labelledby="result-tab-phases" className="result-panel">
+                <section className="phase-list-section">
+                  <h3>Analysis Pipeline Status</h3>
+                  <ul className="phase-list">
+                    {phases.map((phase) => (
+                      <li key={phase.id} className={`phase-card ${phase.status}`}>
+                        <div className="phase-head">
+                          <strong>
+                            <span className={`material-symbols-outlined tone-icon ${phaseTone(phase.status)}`} aria-hidden="true">
+                              {phaseIcon(phase.status)}
+                            </span>
+                            {phase.title}
+                          </strong>
+                          <span className={`phase-status ${phase.status}`}>{phaseStatusLabel(phase.status)}</span>
+                        </div>
+                        <p>{phase.detail}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+
+                <section className="limits info-card info">
+                  <h3>Current Analysis Limits</h3>
+                  <ul>
+                    {report.limits.notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                </section>
+              </section>
+            ) : null}
+          </section>
+          ) : (
+            <section className="results-empty">
+              <h2>No Report Loaded</h2>
+              <p>This route is ready for saved report snapshots, but no in-memory report is available yet.</p>
+              <button type="button" className="results-nav-action" onClick={openScanner}>Go to Scanner</button>
+            </section>
+          )
         ) : null}
       </section>
     </main>

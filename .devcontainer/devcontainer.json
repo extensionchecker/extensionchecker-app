@@ -14,6 +14,12 @@
       ]
     }
   },
-  "postCreateCommand": "cd src && npm install",
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.gitconfig,target=/tmp/host-gitconfig,type=bind,consistency=cached,readonly"
+  ],
+
+  "postCreateCommand": "chmod +x .devcontainer/setup-git.sh && .devcontainer/setup-git.sh && chmod +x .devcontainer/post-setup.sh && .devcontainer/post-setup.sh",
+
   "remoteUser": "node"
 }

@@ -61,4 +61,45 @@ describe('analyzeManifest', () => {
     expect(report.score.severity).toBe('low');
     expect(report.riskSignals.length).toBe(0);
   });
+
+  it('adds externally connectable signal when manifest exposes external surfaces', () => {
+    const report = analyzeManifest(
+      {
+        name: 'Externally Connectable Extension',
+        version: '1.0.0',
+        manifest_version: 3,
+        permissions: ['storage'],
+        externally_connectable: {
+          matches: ['https://example.com/*'],
+          ids: ['abcdefghijklmnopabcdefghijklmnop']
+        }
+      },
+      {
+        type: 'id',
+        value: 'chrome:abcdefghijklmnopabcdefghijklmnop'
+      }
+    );
+
+    expect(report.riskSignals.some((signal) => signal.id === 'externally-connectable')).toBe(true);
+  });
+
+  it('caps score at 100 for heavily privileged manifests', () => {
+    const report = analyzeManifest(
+      {
+        name: 'Very Risky Extension',
+        version: '1.0.0',
+        manifest_version: 3,
+        permissions: ['cookies', 'webRequest', 'webRequestBlocking', 'debugger', 'management', 'nativeMessaging'],
+        host_permissions: ['<all_urls>'],
+        content_scripts: [{ matches: ['<all_urls>'] }]
+      },
+      {
+        type: 'url',
+        value: 'https://example.com/very-risky.zip'
+      }
+    );
+
+    expect(report.score.value).toBe(100);
+    expect(report.score.severity).toBe('critical');
+  });
 });
