@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="ExtensionChecker icon">
+  <defs>
+    <linearGradient id="gBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#636b74"/>
+      <stop offset="100%" stop-color="#2f353d"/>
+    </linearGradient>
+    <linearGradient id="gGood" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#66cc66"/>
+      <stop offset="100%" stop-color="#2e9c45"/>
+    </linearGradient>
+    <linearGradient id="gBad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff5a5f"/>
+      <stop offset="100%" stop-color="#ff1f3d"/>
+    </linearGradient>
+  </defs>
+
+  <path fill="url(#gBody)" d="M104 20a20 20 0 0 1 40 0v18h30a20 20 0 0 1 20 20v30h18a20 20 0 0 1 0 40h-18v30a20 20 0 0 1-20 20h-30v18a20 20 0 0 1-40 0v-18H74a20 20 0 0 1-20-20v-30H36a20 20 0 0 1 0-40h18V58a20 20 0 0 1 20-20h30z"/>
+
+  <g transform="translate(10 150)">
+    <circle cx="42" cy="42" r="42" fill="url(#gGood)"/>
+    <path d="M23 44l13 13 25-25" fill="none" stroke="#0b1b12" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g transform="translate(162 150)">
+    <circle cx="42" cy="42" r="42" fill="url(#gBad)"/>
+    <path d="M27 27l30 30M57 27L27 57" fill="none" stroke="#25090e" stroke-width="9" stroke-linecap="round"/>
+  </g>
+</svg>

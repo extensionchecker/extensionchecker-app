@@ -1,0 +1,23 @@
+{
+  "name": "extensionchecker-src-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ExtensionChecker src workspace",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "engine",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present --parallel",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:coverage": "npm run test:coverage --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

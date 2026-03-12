@@ -1,0 +1,19 @@
+{
+  "name": "extensionchecker-app",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "typescript.tsdk": "src/node_modules/typescript/lib"
+      },
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "vitest.explorer",
+        "openai.chatgpt"
+      ]
+    }
+  },
+  "postCreateCommand": "cd src && npm install",
+  "remoteUser": "node"
+}
