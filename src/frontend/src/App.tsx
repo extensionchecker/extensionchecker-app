@@ -245,6 +245,11 @@ function sourceListingUrl(report: AnalysisReport): string | null {
       }
       return null;
     }
+
+    if (raw.startsWith('opera:')) {
+      const slug = raw.replace(/^opera:/, '').trim();
+      return slug ? `https://addons.opera.com/en/extensions/details/${encodeURIComponent(slug)}/` : null;
+    }
   }
 
   return null;
@@ -395,6 +400,10 @@ function detectedBrowserFromId(value: string): DetectedBrowser {
     return 'edge';
   }
 
+  if (/^opera:/i.test(trimmed)) {
+    return 'opera';
+  }
+
   if (/^safari:/i.test(trimmed) || SAFARI_APP_STORE_ID_REGEX.test(trimmed)) {
     return 'safari';
   }
@@ -466,7 +475,7 @@ function unsupportedBrowserMessage(browser: DetectedBrowser, kind: Extract<Smart
   }
 
   if (browser === 'opera' && kind === 'url') {
-    return 'Opera Add-ons URLs are not supported yet. Upload the extension instead.';
+    return null;
   }
 
   return null;

@@ -477,12 +477,6 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         }, 400);
       }
 
-      if (isOperaAddonsHost(target.url.hostname)) {
-        return context.json({
-          error: 'Opera Add-ons URLs are not supported yet. Upload the extension instead.'
-        }, 400);
-      }
-
       const resolvedIdFromListing = resolveListingUrlToId(target.url);
       if (resolvedIdFromListing) {
         let resolved: ResolvedExtensionId | null = null;
@@ -492,6 +486,10 @@ export function createApp(options: CreateAppOptions = {}): Hono {
           resolved = candidates.find((candidate) => {
             if (listingHost === 'microsoftedge.microsoft.com') {
               return candidate.ecosystem === 'edge';
+            }
+
+            if (listingHost === 'addons.opera.com') {
+              return candidate.ecosystem === 'opera';
             }
 
             if (listingHost === 'chromewebstore.google.com' || listingHost === 'chrome.google.com') {

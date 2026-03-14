@@ -26,4 +26,9 @@ describe('resolveListingUrlToId', () => {
     const url = new URL('https://microsoftedge.microsoft.com/addons/detail/ublock');
     expect(resolveListingUrlToId(url)).toBeNull();
   });
+
+  it('extracts opera addon slug from Opera listing URLs', () => {
+    const url = new URL('https://addons.opera.com/en/extensions/details/ublock/');
+    expect(resolveListingUrlToId(url)).toBe('opera:ublock');
+  });
 });

@@ -39,6 +39,15 @@ describe('resolveExtensionIdToPackage', () => {
     expect(resolved.downloadUrl.pathname).toContain('/extensionwebstorebase/v1/crx');
   });
 
+  it('resolves opera prefixed IDs to Opera download endpoint', () => {
+    const resolved = resolveExtensionIdToPackage('opera:ublock');
+
+    expect(resolved.packageKind).toBe('crx');
+    expect(resolved.canonicalId).toBe('ublock');
+    expect(resolved.downloadUrl.hostname).toBe('addons.opera.com');
+    expect(resolved.downloadUrl.pathname).toContain('/extensions/download/ublock/');
+  });
+
   it('rejects malformed edge prefix IDs', () => {
     expect(() => resolveExtensionIdToPackage('edge:not-valid')).toThrowError(/32 characters/);
   });

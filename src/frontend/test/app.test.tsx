@@ -62,14 +62,13 @@ describe('App', () => {
     expect(container.querySelector('.browser-detection-image')).toBeNull();
   });
 
-  it('shows Opera guidance and disables submit for Opera Add-ons URLs', async () => {
+  it('detects Opera URLs as supported', async () => {
     render(<App />);
 
     fireEvent.change(screen.getByLabelText('Extension URL or ID'), { target: { value: 'https://addons.opera.com/en/extensions/details/ublock/' } });
 
     expect(screen.getByText('Opera extension detected')).toBeInTheDocument();
-    expect(screen.getByText('Opera Add-ons URLs are not supported yet. Upload the extension instead.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Analyze' })).toBeEnabled();
   });
 
   it('shows Safari guidance and disables submit for Safari URLs', async () => {

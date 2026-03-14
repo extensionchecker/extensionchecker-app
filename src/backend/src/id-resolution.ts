@@ -1,9 +1,9 @@
 import type { PackageKind } from './archive';
 
 const CHROME_EXTENSION_ID_REGEX = /^[a-p]{32}$/;
-const SOURCE_PREFIX_REGEX = /^(?<ecosystem>chrome|firefox|safari|edge):(?<rawId>.+)$/i;
+const SOURCE_PREFIX_REGEX = /^(?<ecosystem>chrome|firefox|safari|edge|opera):(?<rawId>.+)$/i;
 const SAFARI_APP_STORE_ID_REGEX = /^id\d{6,}$/i;
-export type ExtensionEcosystem = 'chrome' | 'firefox' | 'edge';
+export type ExtensionEcosystem = 'chrome' | 'firefox' | 'edge' | 'opera';
 
 export type ResolvedExtensionId = {
   ecosystem: ExtensionEcosystem;
@@ -66,6 +66,22 @@ function resolveEdgeId(rawId: string): ResolvedExtensionId {
   };
 }
 
+function resolveOperaId(rawId: string): ResolvedExtensionId {
+  const trimmedId = rawId.trim();
+  if (trimmedId.length < 2) {
+    throw new Error('Opera add-on identifier is too short.');
+  }
+
+  const downloadUrl = new URL(`https://addons.opera.com/extensions/download/${encodeURIComponent(trimmedId)}/`);
+
+  return {
+    ecosystem: 'opera',
+    canonicalId: trimmedId,
+    downloadUrl,
+    packageKind: 'crx'
+  };
+}
+
 export function resolveExtensionIdCandidates(rawInput: string): ResolvedExtensionId[] {
   const input = rawInput.trim();
   if (!input) {
@@ -86,6 +102,10 @@ export function resolveExtensionIdCandidates(rawInput: string): ResolvedExtensio
 
     if (ecosystem.toLowerCase() === 'edge') {
       return [resolveEdgeId(rawId)];
+    }
+
+    if (ecosystem.toLowerCase() === 'opera') {
+      return [resolveOperaId(rawId)];
     }
 
     if (ecosystem.toLowerCase() === 'safari') {

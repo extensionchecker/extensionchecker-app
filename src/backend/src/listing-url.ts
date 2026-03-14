@@ -31,6 +31,17 @@ function findEdgeId(pathname: string): string | null {
   return maybeId ? maybeId.toLowerCase() : null;
 }
 
+function findOperaSlug(pathname: string): string | null {
+  const segments = pathname.split('/').filter(Boolean);
+  const detailIndex = segments.findIndex((segment) => segment === 'details');
+  if (detailIndex < 0 || detailIndex >= segments.length - 1) {
+    return null;
+  }
+
+  const slug = segments[detailIndex + 1];
+  return slug ? decodeURIComponent(slug) : null;
+}
+
 export function resolveListingUrlToId(listingUrl: URL): string | null {
   const host = listingUrl.hostname.toLowerCase();
 
@@ -47,6 +58,11 @@ export function resolveListingUrlToId(listingUrl: URL): string | null {
   if (host === 'microsoftedge.microsoft.com') {
     const edgeId = findEdgeId(listingUrl.pathname);
     return edgeId ? `edge:${edgeId}` : null;
+  }
+
+  if (host === 'addons.opera.com') {
+    const operaSlug = findOperaSlug(listingUrl.pathname);
+    return operaSlug ? `opera:${operaSlug}` : null;
   }
 
   return null;

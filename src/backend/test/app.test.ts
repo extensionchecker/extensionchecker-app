@@ -384,8 +384,14 @@ describe('backend app', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('returns Opera URL guidance instead of attempting download', async () => {
-    const fetchSpy = vi.fn(async () => new Response('should-not-fetch', { status: 200 }));
+  it('resolves Opera listing URL to Opera download endpoint', async () => {
+    const crxBytes = buildCrxManifest();
+    const fetchSpy = vi.fn(async () => new Response(crxBytes, {
+      status: 200,
+      headers: {
+        'content-type': 'application/x-chrome-extension'
+      }
+    }));
     globalThis.fetch = fetchSpy as typeof fetch;
 
     const app = createApp();
@@ -402,10 +408,11 @@ describe('backend app', () => {
       })
     });
 
-    expect(response.status).toBe(400);
-    const body = await response.json() as { error?: string };
-    expect(body.error).toBe('Opera Add-ons URLs are not supported yet. Upload the extension instead.');
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('addons.opera.com/extensions/download/ublock/');
+    const body = await response.json() as { source: { type: string; value: string } };
+    expect(body.source.value).toBe('opera:ublock');
   });
 
   it('returns Safari ID guidance instead of attempting firefox download', async () => {
