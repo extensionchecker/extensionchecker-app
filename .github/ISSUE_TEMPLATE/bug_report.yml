@@ -1,0 +1,106 @@
+name: Bug report
+description: Report a bug in ExtensionChecker
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report!
+
+        For security issues, please use the **Security vulnerability report** link instead of opening a public issue.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened? What did you expect to happen?
+      placeholder: "Manifest analysis reports incorrect risk level for extensions with broad host permissions..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide clear, minimal steps.
+      placeholder: |
+        1. Open the site
+        2. Submit an extension by URL or upload a package
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots / recordings
+      description: Attach images/video if helpful.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: extension_ecosystem
+    attributes:
+      label: Extension ecosystem
+      description: Which browser extension ecosystem is affected?
+      options:
+        - Chrome-compatible
+        - Firefox add-on
+        - Safari
+        - Not applicable
+    validations:
+      required: false
+
+  - type: dropdown
+    id: submission_method
+    attributes:
+      label: Submission method
+      description: How was the extension submitted for analysis?
+      options:
+        - Full URL
+        - Extension ID
+        - File upload
+        - Not applicable
+    validations:
+      required: false
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      placeholder: "Chrome 131 / Firefox 133 / Safari 18"
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "macOS 15 / Windows 11 / Ubuntu 24.04"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console/network logs
+      description: Paste relevant console errors, network responses (redact secrets), etc.
+      render: text
+    validations:
+      required: false

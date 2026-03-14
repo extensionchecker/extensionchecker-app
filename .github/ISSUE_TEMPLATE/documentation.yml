@@ -1,0 +1,39 @@
+name: Documentation
+description: Report missing/incorrect docs or propose doc improvements
+title: "docs: "
+labels:
+  - documentation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the docs!
+
+        For security issues, please use the **Security vulnerability report** link instead of opening a public issue.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What’s wrong or missing?
+      placeholder: "The README doesn’t mention how to …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: location
+    attributes:
+      label: Where is the doc?
+      description: Link to the page/file/section that needs changes.
+      placeholder: "README.md → Deployment section" 
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should we change/add?
+      placeholder: "Add a section on how to run the engine tests locally…"
+    validations:
+      required: true

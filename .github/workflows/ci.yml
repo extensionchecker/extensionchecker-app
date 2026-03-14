@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: src/package-lock.json
+
+      - name: Install
+        working-directory: src
+        run: npm ci
+
+      - name: Lint
+        working-directory: src
+        run: npm run lint
+
+      - name: Test
+        working-directory: src
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: >-
+            src/shared/coverage/lcov.info,
+            src/engine/coverage/lcov.info,
+            src/backend/coverage/lcov.info,
+            src/frontend/coverage/lcov.info
+          verbose: true
+          fail_ci_if_error: true
+
+      - name: Build
+        working-directory: src
+        run: npm run build

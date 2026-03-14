@@ -1,0 +1,26 @@
+name: Question
+description: Ask a question about setup, usage, or the codebase
+title: "question: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For security issues, please use the Security vulnerability report link.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do you want to know?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Anything else that would help answer your question.
+    validations:
+      required: false
