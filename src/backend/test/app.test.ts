@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
+import * as security from '../src/security';
+import * as archive from '../src/archive';
 import { createApp } from '../src/app';
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -879,5 +881,129 @@ describe('backend app', () => {
 
     expect(progressEvents.length).toBeGreaterThanOrEqual(2);
     expect(resultEvents.length).toBe(1);
+  });
+
+  it('rejects upload when content-length exceeds limit', async () => {
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze/upload', {
+      method: 'POST',
+      headers: {
+        'content-type': 'multipart/form-data; boundary=x',
+        'content-length': String(200 * 1024 * 1024)
+      },
+      body: new Uint8Array(0)
+    });
+
+    expect(response.status).toBe(413);
+  });
+
+  it('returns 400 when upload form is missing the file field', async () => {
+    const formData = new FormData();
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json() as { error: string };
+    expect(body.error).toContain('"file"');
+  });
+
+  it('rejects upload when file size exceeds limit', async () => {
+    // Trigger the content-length pre-check (the file.size check requires 80 MB of actual data,
+    // which is impractical in unit tests; the content-length header guard covers the same scenario earlier).
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze/upload', {
+      method: 'POST',
+      headers: {
+        'content-type': 'multipart/form-data; boundary=x',
+        'content-length': String(200 * 1024 * 1024)
+      },
+      body: new Uint8Array(0)
+    });
+
+    expect(response.status).toBe(413);
+  });
+
+  it('returns SSE error when archive parsing fails during upload streaming', async () => {
+    const corruptBytes = new Uint8Array([0x50, 0x4b, 0x99, 0x99]);
+    const file = new File([corruptBytes], 'extension.zip', { type: 'application/zip' });
+    const formData = new FormData();
+    formData.set('file', file);
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze/upload', {
+      method: 'POST',
+      headers: { 'accept': 'text/event-stream' },
+      body: formData
+    });
+
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).toContain('event: error');
+  });
+
+  it('returns SSE error for invalid manifest schema during upload streaming', async () => {
+    const zipBytes = zipSync({ 'manifest.json': strToU8(JSON.stringify({ not_a_valid_manifest: true })) });
+    const file = new File([zipBytes], 'extension.zip', { type: 'application/zip' });
+    const formData = new FormData();
+    formData.set('file', file);
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze/upload', {
+      method: 'POST',
+      headers: { 'accept': 'text/event-stream' },
+      body: formData
+    });
+
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).toContain('event: error');
+  });
+
+  it('returns JSON 500 from app.onError for unhandled route exceptions', async () => {
+    vi.spyOn(security, 'isJsonContentType').mockImplementation(() => {
+      throw new Error('Simulated unexpected failure');
+    });
+
+    const app = createApp({ securityConfig: { allowRequestsWithoutOrigin: true } });
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ source: { type: 'url', value: 'https://chromewebstore.google.com/detail/test/epcnnfbjfcgphgdmggkamkmgojdagdljbjbjgkgm' } })
+    });
+
+    expect(response.status).toBe(500);
+    const body = await response.json() as { error: string };
+    expect(body.error).toBe('Simulated unexpected failure');
+  });
+
+  it('returns SSE error event when an unexpected exception occurs in analyze streaming', async () => {
+    const zipBytes = buildManifestZip();
+    globalThis.fetch = vi.fn(async () => new Response(zipBytes, {
+      status: 200,
+      headers: { 'content-type': 'application/zip' }
+    }));
+
+    vi.spyOn(archive, 'detectPackageKind').mockImplementation(() => {
+      throw new Error('Simulated unexpected archive error');
+    });
+
+    const app = createApp({ securityConfig: { allowRequestsWithoutOrigin: true } });
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'accept': 'text/event-stream'
+      },
+      body: JSON.stringify({ source: { type: 'url', value: 'https://clients2.google.com/service/update2/crx?x=id%3Depcnnfbjfcgphgdmggkamkmgojdagdljbjbjgkgm%26uc' } })
+    });
+
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).toContain('event: error');
+    expect(text).toContain('Simulated unexpected archive error');
   });
 });
