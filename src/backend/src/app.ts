@@ -1,58 +1,35 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { z } from 'zod';
-import { analyzeManifest } from '@extensionchecker/engine';
-import { AnalysisReportSchema, type AnalysisProgressStep, type StoreMetadata } from '@extensionchecker/shared';
-import { ALLOWED_PACKAGE_EXTENSIONS, MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES } from './constants';
+import type { AnalysisProgressStep } from '@extensionchecker/shared';
+import { MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES } from './constants';
 import { type PackageKind, detectPackageKind, extractManifestFromPackage } from './archive';
 import { resolveExtensionIdCandidates, type ResolvedExtensionId } from './id-resolution';
 import { resolveListingUrlToId } from './listing-url';
-import { isOperaAddonsHost, isSafariAppStoreHost, validatePublicFetchUrl } from './url-safety';
+import { isSafariAppStoreHost, validatePublicFetchUrl } from './url-safety';
 import {
   InMemoryRateLimiter,
-  buildRateLimitErrorMessage,
   buildSecurityConfig,
-  hasValidApiAccessToken,
   isJsonContentType,
   isMultipartContentType,
-  isOriginAllowed,
   mergeSecurityConfig,
-  parseRequestOrigin,
-  resolveClientKey,
   type BackendSecurityEnv,
   type SecurityConfigInput
 } from './security';
-
-const AnalyzeRequestSchema = z.object({
-  source: z.discriminatedUnion('type', [
-    z.object({
-      type: z.literal('url'),
-      value: z.string().url()
-    }),
-    z.object({
-      type: z.literal('id'),
-      value: z.string().min(1)
-    })
-  ])
-});
+import { AnalyzeRequestSchema, type ManifestCandidate } from './schemas';
+import {
+  type DownloadedPackage,
+  downloadPackage,
+  exceedsRequestSizeLimit,
+  hasAllowedPackageExtension,
+  isLikelyDirectPackageUrl,
+  pickPackageKindFromUpload,
+  resolveAndDownloadExtensionId
+} from './download';
+import { buildReportFromManifest } from './report';
+import { registerSecurityHeaders, registerApiMiddleware } from './middleware';
 
 const MAX_ANALYZE_REQUEST_BODY_BYTES = 16 * 1024;
 const MAX_UPLOAD_REQUEST_BODY_BYTES = MAX_PACKAGE_SIZE_BYTES + (2 * 1024 * 1024);
-
-type ManifestCandidate = {
-  name?: unknown;
-  version?: unknown;
-  manifest_version?: unknown;
-  permissions?: unknown;
-  optional_permissions?: unknown;
-  host_permissions?: unknown;
-  content_scripts?: unknown;
-  externally_connectable?: unknown;
-};
-
-type AnalyzeSource = { type: 'url'; value: string } | { type: 'id'; value: string };
-type UploadSource = { type: 'file'; filename: string; mimeType: string };
-type ReportSource = AnalyzeSource | UploadSource;
 
 export type CreateAppOptions = {
   securityConfig?: SecurityConfigInput;
@@ -60,290 +37,6 @@ export type CreateAppOptions = {
   now?: () => number;
   env?: BackendSecurityEnv;
 };
-
-const ManifestSchema = z.object({
-  name: z.string().min(1),
-  version: z.string().min(1),
-  manifest_version: z.number().int().min(2).max(3),
-  permissions: z.array(z.string()).optional(),
-  optional_permissions: z.array(z.string()).optional(),
-  host_permissions: z.array(z.string()).optional(),
-  content_scripts: z.array(
-    z.object({
-      matches: z.array(z.string()).optional(),
-      js: z.array(z.string()).optional()
-    })
-  ).optional(),
-  externally_connectable: z.object({
-    matches: z.array(z.string()).optional(),
-    ids: z.array(z.string()).optional()
-  }).optional(),
-  description: z.string().optional(),
-  short_name: z.string().optional(),
-  author: z.union([z.string(), z.object({ email: z.string().optional() })]).optional(),
-  developer: z.object({
-    name: z.string().optional(),
-    url: z.string().optional()
-  }).optional(),
-  homepage_url: z.string().optional(),
-  icons: z.record(z.string(), z.string()).optional()
-});
-
-function hasAllowedPackageExtension(filename: string): boolean {
-  const lowerName = filename.toLowerCase();
-  return ALLOWED_PACKAGE_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
-}
-
-function pickPackageKindFromUpload(file: File): PackageKind {
-  const safeFilename = file.name.length > 0 ? file.name : 'upload.zip';
-  return detectPackageKind(new URL(`https://upload.local/${encodeURIComponent(safeFilename)}`), file.type);
-}
-
-function isLikelyDirectPackageUrl(url: URL): boolean {
-  const path = url.pathname.toLowerCase();
-  if (path.endsWith('.zip') || path.endsWith('.crx') || path.endsWith('.xpi')) {
-    return true;
-  }
-
-  if (url.hostname.toLowerCase() === 'clients2.google.com' && path === '/service/update2/crx') {
-    return true;
-  }
-
-  if (url.hostname.toLowerCase() === 'edge.microsoft.com' && path === '/extensionwebstorebase/v1/crx') {
-    return true;
-  }
-
-  if (url.hostname.toLowerCase() === 'addons.mozilla.org' && path.includes('/downloads/latest/')) {
-    return true;
-  }
-
-  return false;
-}
-
-function parseContentLength(contentLengthHeader: string | undefined): number | null {
-  if (!contentLengthHeader) {
-    return null;
-  }
-
-  const parsed = Number(contentLengthHeader);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return null;
-  }
-
-  return Math.floor(parsed);
-}
-
-function exceedsRequestSizeLimit(contentLengthHeader: string | undefined, maxBytes: number): boolean {
-  const contentLength = parseContentLength(contentLengthHeader);
-  if (contentLength === null) {
-    return false;
-  }
-
-  return contentLength > maxBytes;
-}
-
-type DownloadedPackage = {
-  bytes: ArrayBuffer;
-  contentType: string | null;
-};
-
-type ResolvedIdDownload = {
-  downloaded: DownloadedPackage;
-  packageUrl: URL;
-  packageKindHint: PackageKind;
-  source: AnalyzeSource;
-};
-
-async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeoutMs: number, maxBytes: number): Promise<DownloadedPackage> {
-  const signal = AbortSignal.timeout(timeoutMs);
-
-  let response: Response;
-  try {
-    response = await fetchImpl(url.toString(), { signal });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown network error.';
-    throw new Error(`Failed to download extension package: ${message}`);
-  }
-
-  if (!response.ok) {
-    throw new Error(`Failed to download extension package (${response.status}).`);
-  }
-
-  const contentLength = response.headers.get('content-length');
-  if (contentLength) {
-    const declaredSize = Number(contentLength);
-    if (Number.isFinite(declaredSize) && declaredSize > maxBytes) {
-      throw new Error(`Package exceeds size limit (declared ${Math.round(declaredSize / (1024 * 1024))} MB).`);
-    }
-  }
-
-  let bytes: ArrayBuffer;
-  try {
-    bytes = await response.arrayBuffer();
-  } catch (error) {
-    if (signal.aborted) {
-      throw new Error('Extension package download timed out. The package may be very large. Try uploading the file directly instead.');
-    }
-    const message = error instanceof Error ? error.message : 'Unknown error reading response body.';
-    throw new Error(`Failed to read extension package: ${message}`);
-  }
-
-  return { bytes, contentType: response.headers.get('content-type') };
-}
-
-async function resolveAndDownloadExtensionId(
-  rawId: string,
-  fetchImpl: typeof fetch,
-  timeoutMs: number,
-  maxBytes: number
-): Promise<ResolvedIdDownload> {
-  const candidates = resolveExtensionIdCandidates(rawId);
-  let lastErrorMessage = 'Failed to download extension package.';
-
-  for (const candidate of candidates) {
-    const target = validatePublicFetchUrl(candidate.downloadUrl.toString());
-    if (!target.ok) {
-      lastErrorMessage = target.reason;
-      continue;
-    }
-
-    try {
-      const downloaded = await downloadPackage(target.url, fetchImpl, timeoutMs, maxBytes);
-      return {
-        downloaded,
-        packageUrl: target.url,
-        packageKindHint: candidate.packageKind,
-        source: {
-          type: 'id',
-          value: `${candidate.ecosystem}:${candidate.canonicalId}`
-        }
-      };
-    } catch (error) {
-      lastErrorMessage = error instanceof Error ? error.message : 'Failed to download extension package.';
-    }
-  }
-
-  throw new Error(lastErrorMessage);
-}
-
-function extractStoreMetadata(manifest: z.infer<typeof ManifestSchema>, packageSizeBytes: number, storeUrl: string | null): StoreMetadata {
-  const meta: StoreMetadata = {};
-
-  if (manifest.description) {
-    meta.description = manifest.description;
-  }
-
-  if (manifest.short_name) {
-    meta.shortName = manifest.short_name;
-  }
-
-  if (typeof manifest.author === 'string' && manifest.author.length > 0) {
-    meta.author = manifest.author;
-  } else if (typeof manifest.author === 'object' && manifest.author?.email) {
-    meta.author = manifest.author.email;
-  }
-
-  if (manifest.developer?.name) {
-    meta.developerName = manifest.developer.name;
-  }
-
-  if (manifest.developer?.url) {
-    meta.developerUrl = manifest.developer.url;
-  }
-
-  if (manifest.homepage_url) {
-    meta.homepageUrl = manifest.homepage_url;
-  }
-
-  if (packageSizeBytes > 0) {
-    meta.packageSizeBytes = packageSizeBytes;
-  }
-
-  if (storeUrl) {
-    meta.storeUrl = storeUrl;
-  }
-
-  return meta;
-}
-
-function resolveStoreUrl(source: ReportSource): string | null {
-  if (source.type === 'url') {
-    try {
-      const parsed = new URL(source.value);
-      if (parsed.protocol === 'https:') {
-        return parsed.toString();
-      }
-    } catch { /* ignore */ }
-  }
-
-  if (source.type === 'id') {
-    const raw = source.value.trim();
-
-    if (/^[a-p]{32}$/.test(raw)) {
-      return `https://chromewebstore.google.com/detail/${raw}`;
-    }
-
-    if (raw.startsWith('chrome:')) {
-      const id = raw.replace(/^chrome:/, '');
-      if (/^[a-p]{32}$/.test(id)) {
-        return `https://chromewebstore.google.com/detail/${id}`;
-      }
-    }
-
-    if (raw.startsWith('edge:')) {
-      const id = raw.replace(/^edge:/, '');
-      if (/^[a-p]{32}$/.test(id)) {
-        return `https://microsoftedge.microsoft.com/addons/detail/${id}`;
-      }
-    }
-
-    if (raw.startsWith('firefox:')) {
-      const slug = raw.replace(/^firefox:/, '');
-      if (slug) {
-        return `https://addons.mozilla.org/firefox/addon/${encodeURIComponent(slug)}/`;
-      }
-    }
-  }
-
-  return null;
-}
-
-function buildReportFromManifest(manifestRaw: unknown, source: ReportSource, packageSizeBytes: number) {
-  const parsedManifest = ManifestSchema.safeParse(manifestRaw);
-  if (!parsedManifest.success) {
-    return {
-      ok: false as const,
-      response: new Response(JSON.stringify({ error: 'manifest.json is missing required fields or has invalid structure.' }), {
-        status: 400,
-        headers: {
-          'content-type': 'application/json'
-        }
-      })
-    };
-  }
-
-  const report = analyzeManifest(parsedManifest.data, source);
-  const storeUrl = resolveStoreUrl(source);
-  const storeMetadata = extractStoreMetadata(parsedManifest.data, packageSizeBytes, storeUrl);
-  const enrichedReport = { ...report, storeMetadata };
-  const validatedReport = AnalysisReportSchema.safeParse(enrichedReport);
-  if (!validatedReport.success) {
-    return {
-      ok: false as const,
-      response: new Response(JSON.stringify({ error: 'Internal report contract violation.' }), {
-        status: 500,
-        headers: {
-          'content-type': 'application/json'
-        }
-      })
-    };
-  }
-
-  return {
-    ok: true as const,
-    report: validatedReport.data
-  };
-}
 
 function wantsEventStream(accept: string | undefined): boolean {
   return typeof accept === 'string' && accept.includes('text/event-stream');
@@ -362,72 +55,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     return context.json({ error: message }, 500);
   });
 
-  app.use('*', async (context, next) => {
-    await next();
-
-    context.header('x-content-type-options', 'nosniff');
-    context.header('x-frame-options', 'DENY');
-    context.header('referrer-policy', 'no-referrer');
-    context.header('permissions-policy', 'accelerometer=(), ambient-light-sensor=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
-    context.header('cross-origin-resource-policy', 'same-origin');
-    context.header('cross-origin-opener-policy', 'same-origin');
-    context.header('strict-transport-security', 'max-age=31536000');
-  });
-
-  app.use('/api/*', async (context, next) => {
-    context.header('cache-control', 'no-store');
-
-    const rawOrigin = context.req.header('origin');
-    const parsedOrigin = parseRequestOrigin(rawOrigin);
-    if (rawOrigin && !parsedOrigin) {
-      return context.json({ error: 'Origin header is malformed.' }, 400);
-    }
-
-    const hasConfiguredToken = typeof securityConfig.apiAccessToken === 'string' && securityConfig.apiAccessToken.length > 0;
-    const hasValidToken = hasValidApiAccessToken(context.req.raw.headers, securityConfig.apiAccessToken);
-    const hasTokenBypassForMissingOrigin = hasConfiguredToken && hasValidToken;
-    const requestUrl = new URL(context.req.url);
-    if (parsedOrigin && !isOriginAllowed(parsedOrigin, requestUrl, securityConfig.allowedOrigins)) {
-      return context.json({ error: 'Request origin is not allowed for this API.' }, 403);
-    }
-
-    if (!parsedOrigin && !securityConfig.allowRequestsWithoutOrigin && !hasTokenBypassForMissingOrigin) {
-      return context.json({
-        error: 'Origin header is required for this API. Use the scanner UI or configure API_ALLOW_REQUESTS_WITHOUT_ORIGIN=true for trusted server-to-server usage.'
-      }, 403);
-    }
-
-    if (parsedOrigin) {
-      context.header('access-control-allow-origin', parsedOrigin);
-      context.header('vary', 'Origin');
-      context.header('access-control-allow-methods', 'POST, OPTIONS');
-      context.header('access-control-allow-headers', 'content-type, x-extensionchecker-token');
-      context.header('access-control-max-age', '600');
-    }
-
-    if (context.req.method === 'OPTIONS') {
-      return context.body(null, 204);
-    }
-
-    if (hasConfiguredToken && !hasValidToken) {
-      return context.json({ error: 'Missing or invalid API access token.' }, 401);
-    }
-
-    const rateDecision = rateLimiter.consume(resolveClientKey(context.req.raw.headers), securityConfig, now());
-    if (!rateDecision.ok) {
-      context.header('retry-after', String(rateDecision.retryAfterSeconds));
-      return context.json({ error: buildRateLimitErrorMessage(rateDecision.scope) }, 429);
-    }
-
-    context.header('x-ratelimit-limit-minute-ip', String(securityConfig.rateLimitPerMinutePerIp));
-    context.header('x-ratelimit-remaining-minute-ip', String(rateDecision.remainingPerMinutePerIp));
-    context.header('x-ratelimit-limit-day-ip', String(securityConfig.rateLimitPerDayPerIp));
-    context.header('x-ratelimit-remaining-day-ip', String(rateDecision.remainingPerDayPerIp));
-    context.header('x-ratelimit-limit-day-global', String(securityConfig.rateLimitGlobalPerDay));
-    context.header('x-ratelimit-remaining-day-global', String(rateDecision.remainingGlobalPerDay));
-
-    await next();
-  });
+  registerSecurityHeaders(app);
+  registerApiMiddleware(app, securityConfig, rateLimiter, now);
 
   app.get('/health', (context) => context.json({ status: 'ok' }));
 
