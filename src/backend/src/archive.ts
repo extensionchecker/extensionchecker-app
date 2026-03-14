@@ -33,18 +33,6 @@ function validateZipEntry(file: UnzipFileInfo, entryIndex: number): void {
     throw new Error('Package contains a path-traversal file entry and was rejected.');
   }
 
-  // Zip bomb detection: check the declared compression ratio before decompressing.
-  if (file.size > 0 && file.originalSize > 0) {
-    const ratio = file.originalSize / file.size;
-    if (ratio > MAX_COMPRESSION_RATIO) {
-      throw new Error(`Package contains a file with a suspicious compression ratio (${Math.round(ratio)}:1) and was rejected.`);
-    }
-  }
-
-  // Cap the declared uncompressed size for files we will actually decompress.
-  if (file.originalSize > MAX_DECOMPRESSED_FILE_BYTES) {
-    throw new Error(`Package contains a file that exceeds the maximum allowed uncompressed size (${Math.round(file.originalSize / (1024 * 1024))} MB).`);
-  }
 }
 
 function toU8(bytes: ArrayBuffer | Uint8Array): Uint8Array {
@@ -221,11 +209,32 @@ function isManifestOrLocale(filename: string): boolean {
     || lower.includes('/_locales/');
 }
 
+/**
+ * Validates decompression-specific limits (size cap, compression ratio) for files
+ * we actually plan to extract. Skipped for entries filtered out by isManifestOrLocale.
+ */
+function validateDecompressionLimits(file: UnzipFileInfo): void {
+  if (file.size > 0 && file.originalSize > 0) {
+    const ratio = file.originalSize / file.size;
+    if (ratio > MAX_COMPRESSION_RATIO) {
+      throw new Error(`Package contains a file with a suspicious compression ratio (${Math.round(ratio)}:1) and was rejected.`);
+    }
+  }
+
+  if (file.originalSize > MAX_DECOMPRESSED_FILE_BYTES) {
+    throw new Error(`Package contains a file that exceeds the maximum allowed uncompressed size (${Math.round(file.originalSize / (1024 * 1024))} MB).`);
+  }
+}
+
 function makeZipFilter() {
   let count = 0;
   return function zipFilter(file: UnzipFileInfo): boolean {
     validateZipEntry(file, count++);
-    return isManifestOrLocale(file.name);
+    const shouldExtract = isManifestOrLocale(file.name);
+    if (shouldExtract) {
+      validateDecompressionLimits(file);
+    }
+    return shouldExtract;
   };
 }
 
