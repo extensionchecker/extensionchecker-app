@@ -6,6 +6,17 @@ export type ProgressCallback = (event: AnalysisProgressEvent) => void;
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
+// Total time budget for a single analysis request (connect + stream).
+// Set below Cloudflare's 60-second wall-time limit.
+const ANALYZE_TIMEOUT_MS = 55_000;
+
+function mapFetchError(error: unknown): never {
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    throw new Error('Analysis timed out. The extension may be too large or the server is busy. Please try again.');
+  }
+  throw error;
+}
+
 async function parseReportResponse(response: Response): Promise<AnalysisReport> {
   const rawBody = await response.text();
   let body: unknown = null;
@@ -126,19 +137,29 @@ function streamingHeaders(): Record<string, string> {
 
 export async function analyzeExtensionByUrl(url: string, onProgress?: ProgressCallback): Promise<AnalysisReport> {
   const useStreaming = !!onProgress;
-  const response = await fetch(`${API_BASE_URL}/api/analyze`, {
-    method: 'POST',
-    headers: useStreaming ? streamingHeaders() : { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      source: {
-        type: 'url',
-        value: url
-      }
-    })
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/analyze`, {
+      method: 'POST',
+      headers: useStreaming ? streamingHeaders() : { 'content-type': 'application/json' },
+      body: JSON.stringify({ source: { type: 'url', value: url } }),
+      signal: AbortSignal.timeout(ANALYZE_TIMEOUT_MS)
+    });
+  } catch (error) {
+    mapFetchError(error);
+  }
 
   if (useStreaming && response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
-    return readSSEStream(response, onProgress);
+    try {
+      return await readSSEStream(response, onProgress);
+    } catch (streamError) {
+      if (streamError instanceof Error && streamError.message === 'Backend stream ended without a result.') {
+        // Stream closed without sending a result or error event (e.g. Worker killed mid-flight).
+        // Retry without streaming to get a concrete HTTP response or error.
+        return analyzeExtensionByUrl(url);
+      }
+      throw streamError;
+    }
   }
 
   return parseReportResponse(response);
@@ -146,19 +167,27 @@ export async function analyzeExtensionByUrl(url: string, onProgress?: ProgressCa
 
 export async function analyzeExtensionById(id: string, onProgress?: ProgressCallback): Promise<AnalysisReport> {
   const useStreaming = !!onProgress;
-  const response = await fetch(`${API_BASE_URL}/api/analyze`, {
-    method: 'POST',
-    headers: useStreaming ? streamingHeaders() : { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      source: {
-        type: 'id',
-        value: id
-      }
-    })
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/analyze`, {
+      method: 'POST',
+      headers: useStreaming ? streamingHeaders() : { 'content-type': 'application/json' },
+      body: JSON.stringify({ source: { type: 'id', value: id } }),
+      signal: AbortSignal.timeout(ANALYZE_TIMEOUT_MS)
+    });
+  } catch (error) {
+    mapFetchError(error);
+  }
 
   if (useStreaming && response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
-    return readSSEStream(response, onProgress);
+    try {
+      return await readSSEStream(response, onProgress);
+    } catch (streamError) {
+      if (streamError instanceof Error && streamError.message === 'Backend stream ended without a result.') {
+        return analyzeExtensionById(id);
+      }
+      throw streamError;
+    }
   }
 
   return parseReportResponse(response);
@@ -174,14 +203,27 @@ export async function analyzeExtensionByUpload(file: File, onProgress?: Progress
     headers['accept'] = 'text/event-stream';
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/analyze/upload`, {
-    method: 'POST',
-    headers,
-    body: formData
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/analyze/upload`, {
+      method: 'POST',
+      headers,
+      body: formData,
+      signal: AbortSignal.timeout(ANALYZE_TIMEOUT_MS)
+    });
+  } catch (error) {
+    mapFetchError(error);
+  }
 
   if (useStreaming && response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
-    return readSSEStream(response, onProgress);
+    try {
+      return await readSSEStream(response, onProgress);
+    } catch (streamError) {
+      if (streamError instanceof Error && streamError.message === 'Backend stream ended without a result.') {
+        return analyzeExtensionByUpload(file);
+      }
+      throw streamError;
+    }
   }
 
   return parseReportResponse(response);

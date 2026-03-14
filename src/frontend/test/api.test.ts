@@ -146,19 +146,45 @@ describe('frontend api client', () => {
     expect(report.metadata.name).toBe('API Test Extension');
   });
 
-  it('throws when SSE stream ends without a result event', async () => {
+  it('retries without streaming when SSE stream ends without a result event', async () => {
     const sseBody = [
       'event: progress\ndata: {"step":"resolving","message":"Working…","percent":10}\n\n'
     ].join('');
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
-      status: 200,
-      headers: { 'content-type': 'text/event-stream' }
-    }));
+    // First call returns an SSE stream with no result event.
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(sseBody, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      }))
+      // Retry (non-streaming) returns a valid JSON report.
+      .mockResolvedValueOnce(new Response(JSON.stringify(baseReport), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }));
+
+    const report = await analyzeExtensionByUrl('https://example.com/extension.zip', () => {});
+    expect(report.metadata.name).toBe('API Test Extension');
+  });
+
+  it('propagates retry error when SSE stream and non-streaming retry both fail', async () => {
+    const sseBody = [
+      'event: progress\ndata: {"step":"resolving","message":"Working…","percent":10}\n\n'
+    ].join('');
+
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(sseBody, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Internal server error.' }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' }
+      }));
 
     await expect(
       analyzeExtensionByUrl('https://example.com/extension.zip', () => {})
-    ).rejects.toThrow('Backend stream ended without a result.');
+    ).rejects.toThrow('Internal server error.');
   });
 
   it('throws on SSE result event with malformed report payload', async () => {
