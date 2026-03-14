@@ -216,8 +216,8 @@ Before any decompression is attempted, every archive must be validated against t
 - **Entry count limit**: Archives with more than 5,000 entries are rejected outright. A legitimate browser extension does not need thousands of entries; an entry count this high most likely indicates a crafted archive designed to exhaust central-directory parsing.
 - **Null byte filename rejection**: Any entry whose filename contains a null byte is rejected. Null bytes in filenames are used in parser-confusion attacks and have no legitimate use inside an extension archive.
 - **Path traversal rejection**: Any entry whose filename begins with an absolute path (`/`) or contains directory traversal segments (`../`) is rejected. If the backend ever writes files to disk in the future, this defense prevents escape from any extraction sandbox.
-- **Compression ratio limit**: Any entry claiming an uncompressed size more than 1,000 times its compressed size is rejected before decompression. This is the primary zip bomb defense.
-- **Per-file decompressed size limit**: Even for files that pass the ratio check, any entry claiming an uncompressed size greater than 5 MB is rejected. A `manifest.json` or locale file legitimately has no reason to be this large.
+- **Compression ratio limit**: Any entry selected for decompression (manifest and locale files) that claims an uncompressed size more than 1,000 times its compressed size is rejected before decompression. Entries that are not selected for decompression are skipped without inflating, so their compression ratio is irrelevant. This is the primary zip bomb defense.
+- **Per-file decompressed size limit**: Even for files that pass the ratio check, any entry selected for decompression that claims an uncompressed size greater than 5 MB is rejected. A `manifest.json` or locale file legitimately has no reason to be this large.
 - **Total package size limit**: The backend rejects any upload or remote download that exceeds 80 MB compressed. This limit is enforced before the archive is parsed.
 
 ### Privacy Posture
