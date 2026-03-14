@@ -226,7 +226,7 @@ h1 {
   margin: 0 0 0.95rem;
   padding-bottom: 0;
   border-bottom: 1px solid var(--panel-border);
-  overflow-x: auto;
+  overflow: hidden;
 }
 
 .intake-tab-button {
@@ -243,6 +243,19 @@ h1 {
   font-weight: 700;
   position: relative;
   top: 1px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.intake-tab-label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.intake-tab-title-icon {
+  font-size: 1rem;
+  margin-right: 0.45rem;
+  flex-shrink: 0;
 }
 
 .intake-tab-button.is-active {
@@ -274,6 +287,14 @@ h1 {
 .intake-panel-secondary {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--panel) 82%, transparent), color-mix(in srgb, var(--input-bg) 56%, transparent));
+}
+
+.intake-panel-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.2rem;
 }
 
 .panel-copy-block {
@@ -487,6 +508,41 @@ button:hover:enabled {
 .form-actions {
   display: flex;
   justify-content: flex-start;
+}
+
+.use-for-card {
+  margin-left: auto;
+  display: grid;
+  gap: 0.45rem;
+  justify-items: start;
+  min-inline-size: 12rem;
+  padding: 0.72rem 0.82rem;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 92%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 74%, transparent);
+}
+
+.use-for-label {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.use-for-icons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.use-for-icon {
+  inline-size: 1.05rem;
+  block-size: 1.05rem;
+  border-radius: 999px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .secondary-button {
@@ -1252,6 +1308,18 @@ a.extension-identity-store:hover {
 
   .intake-tab-button {
     padding-inline: 0.85rem;
+  }
+
+  .intake-panel-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .use-for-card {
+    margin-left: 0;
+    min-inline-size: 0;
+    inline-size: 100%;
   }
 
   .intake-panel {

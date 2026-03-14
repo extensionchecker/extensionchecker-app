@@ -818,7 +818,8 @@ export function App(): JSX.Element {
                 className={`intake-tab-button${pasteTabSelected ? ' is-active' : ''}`}
                 onClick={() => setIntakeTab('paste')}
               >
-                Paste
+                <span className="material-symbols-outlined intake-tab-title-icon" aria-hidden="true">content_paste</span>
+                <span className="intake-tab-label">Paste</span>
               </button>
               <button
                 type="button"
@@ -829,7 +830,8 @@ export function App(): JSX.Element {
                 className={`intake-tab-button${uploadTabSelected ? ' is-active' : ''}`}
                 onClick={() => setIntakeTab('upload')}
               >
-                Upload
+                <span className="material-symbols-outlined intake-tab-title-icon" aria-hidden="true">upload</span>
+                <span className="intake-tab-label">Upload</span>
               </button>
             </div>
 
@@ -869,22 +871,34 @@ export function App(): JSX.Element {
                     <p className="field-hint warning">{smartSubmission.helperMessage}</p>
                   ) : null}
 
-                  <div className="form-actions">
-                    <button type="submit" disabled={!canSubmitText || isSubmitting} aria-busy={textSubmitting}>
-                      <span className="button-content">
-                        {textSubmitting ? (
-                          <span className="button-loading">
-                            <span className="button-spinner" aria-hidden="true" />
-                            {progress ? progress.message : 'Analyzing\u2026'}
-                          </span>
-                        ) : (
-                          <>
-                            <span className="material-symbols-outlined button-icon" aria-hidden="true">search</span>
-                            Analyze
-                          </>
-                        )}
+                  <div className="intake-panel-footer">
+                    <div className="form-actions">
+                      <button type="submit" disabled={!canSubmitText || isSubmitting} aria-busy={textSubmitting}>
+                        <span className="button-content">
+                          {textSubmitting ? (
+                            <span className="button-loading">
+                              <span className="button-spinner" aria-hidden="true" />
+                              {progress ? progress.message : 'Analyzing\u2026'}
+                            </span>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined button-icon" aria-hidden="true">search</span>
+                              Analyze
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    </div>
+
+                    <div className="use-for-card" aria-label="Use paste for Chrome, Firefox, Edge, and Opera extensions">
+                      <span className="use-for-label">Use for:</span>
+                      <span className="use-for-icons" aria-hidden="true">
+                        <img className="use-for-icon" src="/browser-icons/icon_chrome.png" alt="" />
+                        <img className="use-for-icon" src="/browser-icons/icon_firefox.png" alt="" />
+                        <img className="use-for-icon" src="/browser-icons/icon_edge.png" alt="" />
+                        <img className="use-for-icon" src="/browser-icons/icon_opera.png" alt="" />
                       </span>
-                    </button>
+                    </div>
                   </div>
 
                   {textSubmitting && progress ? (
@@ -925,22 +939,35 @@ export function App(): JSX.Element {
                     <p className="field-hint">Accepted formats: <code>.crx</code>, <code>.xpi</code>, <code>.zip</code>.</p>
                   )}
 
-                  <div className="form-actions">
-                    <button type="submit" className="secondary-button" disabled={!canSubmitUpload || isSubmitting} aria-busy={uploadSubmitting}>
-                      <span className="button-content">
-                        {uploadSubmitting ? (
-                          <span className="button-loading">
-                            <span className="button-spinner" aria-hidden="true" />
-                            {progress ? progress.message : 'Uploading\u2026'}
-                          </span>
-                        ) : (
-                          <>
-                            <span className="material-symbols-outlined button-icon" aria-hidden="true">upload</span>
-                            Analyze Upload
-                          </>
-                        )}
+                  <div className="intake-panel-footer">
+                    <div className="form-actions">
+                      <button type="submit" className="secondary-button" disabled={!canSubmitUpload || isSubmitting} aria-busy={uploadSubmitting}>
+                        <span className="button-content">
+                          {uploadSubmitting ? (
+                            <span className="button-loading">
+                              <span className="button-spinner" aria-hidden="true" />
+                              {progress ? progress.message : 'Uploading\u2026'}
+                            </span>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined button-icon" aria-hidden="true">upload</span>
+                              Analyze Upload
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    </div>
+
+                    <div className="use-for-card" aria-label="Use upload for Chrome, Firefox, Edge, Opera, and Safari extensions">
+                      <span className="use-for-label">Use for:</span>
+                      <span className="use-for-icons" aria-hidden="true">
+                        <img className="use-for-icon" src="/browser-icons/icon_chrome.png" alt="" />
+                        <img className="use-for-icon" src="/browser-icons/icon_firefox.png" alt="" />
+                        <img className="use-for-icon" src="/browser-icons/icon_edge.png" alt="" />
+                        <img className="use-for-icon" src="/browser-icons/icon_opera.png" alt="" />
+                        <img className="use-for-icon" src="/browser-icons/icon_safari.png" alt="" />
                       </span>
-                    </button>
+                    </div>
                   </div>
 
                   {uploadSubmitting && progress ? (
