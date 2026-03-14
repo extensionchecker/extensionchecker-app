@@ -12,7 +12,9 @@ const ALLOWED_SUBMISSION_HOSTS = new Set([
   'clients2.google.com',
   'addons.mozilla.org',
   'apps.apple.com',
-  'itunes.apple.com'
+  'itunes.apple.com',
+  'microsoftedge.microsoft.com',
+  'edge.microsoft.com'
 ]);
 
 export function isAllowedSubmissionHost(hostname: string): boolean {
@@ -79,7 +81,7 @@ export function validatePublicFetchUrl(rawUrl: string): { ok: true; url: URL } |
   if (!isAllowedSubmissionHost(hostname)) {
     return {
       ok: false,
-      reason: 'Unsupported URL domain. Use a Chrome Web Store URL, Firefox Add-ons URL, or upload a package file.'
+      reason: 'Unsupported URL domain. Use a Chrome Web Store, Edge Add-ons, or Firefox Add-ons URL, or upload a package file.'
     };
   }
 

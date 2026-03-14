@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { analyzeManifest } from '@extensionchecker/engine';
-import { AnalysisReportSchema } from '@extensionchecker/shared';
+import { AnalysisReportSchema, type AnalysisProgressStep, type StoreMetadata } from '@extensionchecker/shared';
 import { ALLOWED_PACKAGE_EXTENSIONS, MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES } from './constants';
 import { type PackageKind, detectPackageKind, extractManifestFromPackage } from './archive';
 import { resolveExtensionIdToPackage } from './id-resolution';
@@ -76,7 +77,16 @@ const ManifestSchema = z.object({
   externally_connectable: z.object({
     matches: z.array(z.string()).optional(),
     ids: z.array(z.string()).optional()
-  }).optional()
+  }).optional(),
+  description: z.string().optional(),
+  short_name: z.string().optional(),
+  author: z.union([z.string(), z.object({ email: z.string().optional() })]).optional(),
+  developer: z.object({
+    name: z.string().optional(),
+    url: z.string().optional()
+  }).optional(),
+  homepage_url: z.string().optional(),
+  icons: z.record(z.string(), z.string()).optional()
 });
 
 function hasAllowedPackageExtension(filename: string): boolean {
@@ -96,6 +106,10 @@ function isLikelyDirectPackageUrl(url: URL): boolean {
   }
 
   if (url.hostname.toLowerCase() === 'clients2.google.com' && path === '/service/update2/crx') {
+    return true;
+  }
+
+  if (url.hostname.toLowerCase() === 'edge.microsoft.com' && path === '/extensionwebstorebase/v1/crx') {
     return true;
   }
 
@@ -128,18 +142,131 @@ function exceedsRequestSizeLimit(contentLengthHeader: string | undefined, maxByt
   return contentLength > maxBytes;
 }
 
-async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeoutMs: number): Promise<Response> {
+type DownloadedPackage = {
+  bytes: ArrayBuffer;
+  contentType: string | null;
+};
+
+async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeoutMs: number, maxBytes: number): Promise<DownloadedPackage> {
+  const signal = AbortSignal.timeout(timeoutMs);
+
+  let response: Response;
   try {
-    return await fetchImpl(url.toString(), {
-      signal: AbortSignal.timeout(timeoutMs)
-    });
+    response = await fetchImpl(url.toString(), { signal });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown network error.';
     throw new Error(`Failed to download extension package: ${message}`);
   }
+
+  if (!response.ok) {
+    throw new Error(`Failed to download extension package (${response.status}).`);
+  }
+
+  const contentLength = response.headers.get('content-length');
+  if (contentLength) {
+    const declaredSize = Number(contentLength);
+    if (Number.isFinite(declaredSize) && declaredSize > maxBytes) {
+      throw new Error(`Package exceeds size limit (declared ${Math.round(declaredSize / (1024 * 1024))} MB).`);
+    }
+  }
+
+  let bytes: ArrayBuffer;
+  try {
+    bytes = await response.arrayBuffer();
+  } catch (error) {
+    if (signal.aborted) {
+      throw new Error('Extension package download timed out. The package may be very large. Try uploading the file directly instead.');
+    }
+    const message = error instanceof Error ? error.message : 'Unknown error reading response body.';
+    throw new Error(`Failed to read extension package: ${message}`);
+  }
+
+  return { bytes, contentType: response.headers.get('content-type') };
 }
 
-function buildReportFromManifest(manifestRaw: unknown, source: ReportSource) {
+function extractStoreMetadata(manifest: z.infer<typeof ManifestSchema>, packageSizeBytes: number, storeUrl: string | null): StoreMetadata {
+  const meta: StoreMetadata = {};
+
+  if (manifest.description) {
+    meta.description = manifest.description;
+  }
+
+  if (manifest.short_name) {
+    meta.shortName = manifest.short_name;
+  }
+
+  if (typeof manifest.author === 'string' && manifest.author.length > 0) {
+    meta.author = manifest.author;
+  } else if (typeof manifest.author === 'object' && manifest.author?.email) {
+    meta.author = manifest.author.email;
+  }
+
+  if (manifest.developer?.name) {
+    meta.developerName = manifest.developer.name;
+  }
+
+  if (manifest.developer?.url) {
+    meta.developerUrl = manifest.developer.url;
+  }
+
+  if (manifest.homepage_url) {
+    meta.homepageUrl = manifest.homepage_url;
+  }
+
+  if (packageSizeBytes > 0) {
+    meta.packageSizeBytes = packageSizeBytes;
+  }
+
+  if (storeUrl) {
+    meta.storeUrl = storeUrl;
+  }
+
+  return meta;
+}
+
+function resolveStoreUrl(source: ReportSource): string | null {
+  if (source.type === 'url') {
+    try {
+      const parsed = new URL(source.value);
+      if (parsed.protocol === 'https:') {
+        return parsed.toString();
+      }
+    } catch { /* ignore */ }
+  }
+
+  if (source.type === 'id') {
+    const raw = source.value.trim();
+
+    if (/^[a-p]{32}$/.test(raw)) {
+      return `https://chromewebstore.google.com/detail/${raw}`;
+    }
+
+    if (raw.startsWith('chrome:')) {
+      const id = raw.replace(/^chrome:/, '');
+      if (/^[a-p]{32}$/.test(id)) {
+        return `https://chromewebstore.google.com/detail/${id}`;
+      }
+    }
+
+    if (raw.startsWith('edge:')) {
+      const id = raw.replace(/^edge:/, '');
+      if (/^[a-p]{32}$/.test(id)) {
+        return `https://microsoftedge.microsoft.com/addons/detail/${id}`;
+      }
+    }
+
+    if (raw.startsWith('firefox:')) {
+      const slug = raw.replace(/^firefox:/, '');
+      if (slug) {
+        return `https://addons.mozilla.org/firefox/addon/${encodeURIComponent(slug)}/`;
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildReportFromManifest(manifestRaw: unknown, source: ReportSource, packageSizeBytes: number) {
   const parsedManifest = ManifestSchema.safeParse(manifestRaw);
   if (!parsedManifest.success) {
     return {
@@ -154,7 +281,10 @@ function buildReportFromManifest(manifestRaw: unknown, source: ReportSource) {
   }
 
   const report = analyzeManifest(parsedManifest.data, source);
-  const validatedReport = AnalysisReportSchema.safeParse(report);
+  const storeUrl = resolveStoreUrl(source);
+  const storeMetadata = extractStoreMetadata(parsedManifest.data, packageSizeBytes, storeUrl);
+  const enrichedReport = { ...report, storeMetadata };
+  const validatedReport = AnalysisReportSchema.safeParse(enrichedReport);
   if (!validatedReport.success) {
     return {
       ok: false as const,
@@ -171,6 +301,10 @@ function buildReportFromManifest(manifestRaw: unknown, source: ReportSource) {
     ok: true as const,
     report: validatedReport.data
   };
+}
+
+function wantsEventStream(accept: string | undefined): boolean {
+  return typeof accept === 'string' && accept.includes('text/event-stream');
 }
 
 export function createApp(options: CreateAppOptions = {}): Hono {
@@ -281,6 +415,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return context.json({ error: 'Invalid request body.' }, 400);
     }
 
+    const streaming = wantsEventStream(context.req.header('accept'));
+
     let packageUrl: URL;
     let packageKindHint: PackageKind | null = null;
     let source = parsedRequest.data.source;
@@ -342,47 +478,93 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       };
     }
 
-    let response: Response;
-    try {
-      response = await downloadPackage(packageUrl, fetchImpl, securityConfig.upstreamTimeoutMs);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to download extension package.';
-      return context.json({ error: message }, 502);
-    }
+    if (!streaming) {
+      let downloaded: DownloadedPackage;
+      try {
+        downloaded = await downloadPackage(packageUrl, fetchImpl, securityConfig.upstreamTimeoutMs, MAX_PACKAGE_SIZE_BYTES);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to download extension package.';
+        return context.json({ error: message }, 502);
+      }
 
-    if (!response.ok) {
-      return context.json({ error: `Failed to download extension package (${response.status}).` }, 400);
-    }
-
-    const contentLength = response.headers.get('content-length');
-    if (contentLength) {
-      const size = Number(contentLength);
-      if (!Number.isNaN(size) && size > MAX_PACKAGE_SIZE_BYTES) {
+      if (downloaded.bytes.byteLength > MAX_PACKAGE_SIZE_BYTES) {
         return context.json({ error: `Package exceeds ${MAX_PACKAGE_SIZE_MEGABYTES} MB limit.` }, 413);
       }
+
+      const packageKind = packageKindHint ?? detectPackageKind(packageUrl, downloaded.contentType);
+
+      let manifestRaw: ManifestCandidate;
+      try {
+        manifestRaw = extractManifestFromPackage(downloaded.bytes, packageKind) as ManifestCandidate;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Package parsing failed.';
+        return context.json({ error: message }, 400);
+      }
+
+      const reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength);
+      if (!reportResult.ok) {
+        return reportResult.response;
+      }
+
+      return context.json(reportResult.report, 200);
     }
 
-    const bytes = await response.arrayBuffer();
-    if (bytes.byteLength > MAX_PACKAGE_SIZE_BYTES) {
-      return context.json({ error: `Package exceeds ${MAX_PACKAGE_SIZE_MEGABYTES} MB limit.` }, 413);
-    }
+    // --- SSE streaming path ---
+    const capturedPackageUrl = packageUrl;
+    const capturedPackageKindHint = packageKindHint;
+    const capturedSource = source;
 
-    const packageKind = packageKindHint ?? detectPackageKind(packageUrl, response.headers.get('content-type'));
+    return streamSSE(context, async (stream) => {
+      const emitProgress = async (step: AnalysisProgressStep, message: string, percent: number): Promise<void> => {
+        await stream.writeSSE({ event: 'progress', data: JSON.stringify({ step, message, percent }) });
+      };
 
-    let manifestRaw: ManifestCandidate;
-    try {
-      manifestRaw = extractManifestFromPackage(bytes, packageKind) as ManifestCandidate;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Package parsing failed.';
-      return context.json({ error: message }, 400);
-    }
+      try {
+        await emitProgress('resolving', 'Resolving extension source…', 10);
 
-    const reportResult = buildReportFromManifest(manifestRaw, source);
-    if (!reportResult.ok) {
-      return reportResult.response;
-    }
+        await emitProgress('downloading', 'Downloading extension package…', 20);
 
-    return context.json(reportResult.report, 200);
+        let downloaded: DownloadedPackage;
+        try {
+          downloaded = await downloadPackage(capturedPackageUrl, fetchImpl, securityConfig.upstreamTimeoutMs, MAX_PACKAGE_SIZE_BYTES);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to download extension package.';
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: message }) });
+          return;
+        }
+
+        if (downloaded.bytes.byteLength > MAX_PACKAGE_SIZE_BYTES) {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: `Package exceeds ${MAX_PACKAGE_SIZE_MEGABYTES} MB limit.` }) });
+          return;
+        }
+
+        await emitProgress('extracting', 'Extracting manifest from package…', 60);
+
+        const packageKind = capturedPackageKindHint ?? detectPackageKind(capturedPackageUrl, downloaded.contentType);
+
+        let manifestRaw: ManifestCandidate;
+        try {
+          manifestRaw = extractManifestFromPackage(downloaded.bytes, packageKind) as ManifestCandidate;
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Package parsing failed.';
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: msg }) });
+          return;
+        }
+
+        await emitProgress('analyzing', 'Analyzing manifest and permissions…', 80);
+
+        const reportResult = buildReportFromManifest(manifestRaw, capturedSource, downloaded.bytes.byteLength);
+        if (!reportResult.ok) {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Internal report contract violation.' }) });
+          return;
+        }
+
+        await emitProgress('complete', 'Analysis complete.', 100);
+        await stream.writeSSE({ event: 'result', data: JSON.stringify(reportResult.report) });
+      } catch {
+        await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Unexpected stream error.' }) });
+      }
+    });
   });
 
   app.post('/api/analyze/upload', async (context) => {
@@ -409,28 +591,70 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       return context.json({ error: 'Uploaded file extension must be .zip, .xpi, or .crx.' }, 400);
     }
 
+    const streaming = wantsEventStream(context.req.header('accept'));
     const packageKind = pickPackageKindFromUpload(uploaded);
 
-    let manifestRaw: ManifestCandidate;
-    try {
-      manifestRaw = extractManifestFromPackage(await uploaded.arrayBuffer(), packageKind) as ManifestCandidate;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Package parsing failed.';
-      return context.json({ error: message }, 400);
+    if (!streaming) {
+      let manifestRaw: ManifestCandidate;
+      try {
+        manifestRaw = extractManifestFromPackage(await uploaded.arrayBuffer(), packageKind) as ManifestCandidate;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Package parsing failed.';
+        return context.json({ error: message }, 400);
+      }
+
+      const source = {
+        type: 'file' as const,
+        filename: uploaded.name,
+        mimeType: uploaded.type || 'application/octet-stream'
+      };
+
+      const reportResult = buildReportFromManifest(manifestRaw, source, uploaded.size);
+      if (!reportResult.ok) {
+        return reportResult.response;
+      }
+
+      return context.json(reportResult.report, 200);
     }
 
-    const source = {
-      type: 'file' as const,
-      filename: uploaded.name,
-      mimeType: uploaded.type || 'application/octet-stream'
-    };
+    // --- SSE streaming path ---
+    return streamSSE(context, async (stream) => {
+      const emitProgress = async (step: AnalysisProgressStep, message: string, percent: number): Promise<void> => {
+        await stream.writeSSE({ event: 'progress', data: JSON.stringify({ step, message, percent }) });
+      };
 
-    const reportResult = buildReportFromManifest(manifestRaw, source);
-    if (!reportResult.ok) {
-      return reportResult.response;
-    }
+      try {
+        await emitProgress('extracting', 'Extracting manifest from package…', 40);
 
-    return context.json(reportResult.report, 200);
+        let manifestRaw: ManifestCandidate;
+        try {
+          manifestRaw = extractManifestFromPackage(await uploaded.arrayBuffer(), packageKind) as ManifestCandidate;
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Package parsing failed.';
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: msg }) });
+          return;
+        }
+
+        await emitProgress('analyzing', 'Analyzing manifest and permissions…', 70);
+
+        const source = {
+          type: 'file' as const,
+          filename: uploaded.name,
+          mimeType: uploaded.type || 'application/octet-stream'
+        };
+
+        const reportResult = buildReportFromManifest(manifestRaw, source, uploaded.size);
+        if (!reportResult.ok) {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Internal report contract violation.' }) });
+          return;
+        }
+
+        await emitProgress('complete', 'Analysis complete.', 100);
+        await stream.writeSSE({ event: 'result', data: JSON.stringify(reportResult.report) });
+      } catch {
+        await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Unexpected stream error.' }) });
+      }
+    });
   });
 
   return app;

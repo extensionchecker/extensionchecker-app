@@ -71,6 +71,13 @@ function fallbackNameFromUrl(urlString: string): string | null {
     }
   }
 
+  if (host.includes('microsoftedge.microsoft.com')) {
+    const detailIndex = segments.findIndex((segment) => segment === 'detail');
+    if (detailIndex >= 0 && segments[detailIndex + 1]) {
+      return normalizeHumanLabel(segments[detailIndex + 1] ?? '');
+    }
+  }
+
   const lastSegment = segments[segments.length - 1];
   if (lastSegment) {
     return normalizeHumanLabel(lastSegment);
@@ -99,6 +106,14 @@ function fallbackNameFromSourceId(rawSourceId: string): string | null {
 
   if (sourceId.startsWith('safari:')) {
     return normalizeHumanLabel(sourceId.slice('safari:'.length).trim());
+  }
+
+  if (sourceId.startsWith('edge:')) {
+    const id = sourceId.slice('edge:'.length).trim();
+    if (CHROME_EXTENSION_ID_PATTERN.test(id)) {
+      return `Edge Extension (${id.slice(0, 8)}...)`;
+    }
+    return normalizeHumanLabel(id);
   }
 
   if (CHROME_EXTENSION_ID_PATTERN.test(sourceId)) {

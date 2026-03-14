@@ -16,4 +16,14 @@ describe('resolveListingUrlToId', () => {
     const url = new URL('https://example.com/extension.zip');
     expect(resolveListingUrlToId(url)).toBeNull();
   });
+
+  it('extracts edge extension ID from Edge Add-ons listing URLs', () => {
+    const url = new URL('https://microsoftedge.microsoft.com/addons/detail/ublock/nffknjpglkklphnibdiadeeeeailfnog');
+    expect(resolveListingUrlToId(url)).toBe('edge:nffknjpglkklphnibdiadeeeeailfnog');
+  });
+
+  it('returns null for Edge URLs without a valid extension ID', () => {
+    const url = new URL('https://microsoftedge.microsoft.com/addons/detail/ublock');
+    expect(resolveListingUrlToId(url)).toBeNull();
+  });
 });

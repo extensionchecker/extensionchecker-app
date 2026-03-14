@@ -568,4 +568,245 @@ describe('backend app', () => {
     const body = await response.json() as { error?: string };
     expect(body.error).toMatch(/Failed to download extension package/);
   });
+
+  it('resolves Edge listing URL to edge update endpoint', async () => {
+    const crxBytes = buildCrxManifest();
+    const fetchSpy = vi.fn(async () => new Response(crxBytes, {
+      status: 200,
+      headers: {
+        'content-type': 'application/x-chrome-extension'
+      }
+    }));
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        source: {
+          type: 'url',
+          value: 'https://microsoftedge.microsoft.com/addons/detail/ublock/nffknjpglkklphnibdiadeeeeailfnog'
+        }
+      })
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('edge.microsoft.com/extensionwebstorebase/v1/crx');
+  });
+
+  it('resolves edge-prefixed ID to edge update endpoint', async () => {
+    const crxBytes = buildCrxManifest();
+    const fetchSpy = vi.fn(async () => new Response(crxBytes, {
+      status: 200,
+      headers: {
+        'content-type': 'application/x-chrome-extension'
+      }
+    }));
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        source: {
+          type: 'id',
+          value: 'edge:nffknjpglkklphnibdiadeeeeailfnog'
+        }
+      })
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('edge.microsoft.com/extensionwebstorebase/v1/crx');
+  });
+
+  it('includes storeMetadata in analysis report', async () => {
+    const zipBytes = zipSync({
+      'manifest.json': strToU8(JSON.stringify({
+        name: 'Metadata Test Extension',
+        version: '2.0.0',
+        manifest_version: 3,
+        description: 'A test extension with metadata',
+        author: 'Test Author',
+        homepage_url: 'https://example.com',
+        developer: {
+          name: 'Dev Name',
+          url: 'https://dev.example.com'
+        },
+        permissions: ['storage']
+      }))
+    });
+
+    globalThis.fetch = vi.fn(async () => new Response(zipBytes, {
+      status: 200,
+      headers: {
+        'content-type': 'application/zip'
+      }
+    })) as typeof fetch;
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        source: {
+          type: 'url',
+          value: 'https://addons.mozilla.org/firefox/downloads/latest/metadata-test/addon-latest.xpi'
+        }
+      })
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as {
+      storeMetadata?: {
+        description?: string;
+        author?: string;
+        developerName?: string;
+        developerUrl?: string;
+        homepageUrl?: string;
+        packageSizeBytes?: number;
+        storeUrl?: string;
+      };
+    };
+    expect(body.storeMetadata).toBeDefined();
+    expect(body.storeMetadata?.description).toBe('A test extension with metadata');
+    expect(body.storeMetadata?.author).toBe('Test Author');
+    expect(body.storeMetadata?.developerName).toBe('Dev Name');
+    expect(body.storeMetadata?.developerUrl).toBe('https://dev.example.com');
+    expect(body.storeMetadata?.homepageUrl).toBe('https://example.com');
+    expect(body.storeMetadata?.packageSizeBytes).toBeGreaterThan(0);
+    expect(body.storeMetadata?.storeUrl).toContain('addons.mozilla.org');
+  });
+
+  it('returns SSE progress events when Accept: text/event-stream is set', async () => {
+    const zipBytes = buildManifestZip();
+    globalThis.fetch = vi.fn(async () => new Response(zipBytes, {
+      status: 200,
+      headers: { 'content-type': 'application/zip' }
+    })) as typeof fetch;
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'accept': 'text/event-stream'
+      },
+      body: JSON.stringify({
+        source: {
+          type: 'url',
+          value: 'https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/addon-latest.xpi'
+        }
+      })
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+
+    const text = await response.text();
+    const events = text.split('\n\n').filter(Boolean);
+
+    const progressEvents = events.filter(e => e.includes('event: progress'));
+    const resultEvents = events.filter(e => e.includes('event: result'));
+
+    expect(progressEvents.length).toBeGreaterThanOrEqual(4);
+    expect(resultEvents.length).toBe(1);
+
+    const firstProgress = progressEvents[0];
+    expect(firstProgress).toContain('resolving');
+
+    const resultData = resultEvents[0]?.split('\n').find(l => l.startsWith('data:'))?.slice(5).trim();
+    const report = JSON.parse(resultData as string) as { metadata?: { name?: string } };
+    expect(report.metadata?.name).toBe('Backend Test Extension');
+  });
+
+  it('returns SSE error event on download failure', async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error('network down');
+    }) as typeof fetch;
+
+    const app = createApp({ securityConfig: { upstreamTimeoutMs: 1_000 } });
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'accept': 'text/event-stream'
+      },
+      body: JSON.stringify({
+        source: {
+          type: 'url',
+          value: 'https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/addon-latest.xpi'
+        }
+      })
+    });
+
+    expect(response.status).toBe(200);
+
+    const text = await response.text();
+    const errorEvents = text.split('\n\n').filter(e => e.includes('event: error'));
+    expect(errorEvents.length).toBe(1);
+    expect(errorEvents[0]).toContain('network down');
+  });
+
+  it('returns JSON (not SSE) when Accept header is absent', async () => {
+    const zipBytes = buildManifestZip();
+    globalThis.fetch = vi.fn(async () => new Response(zipBytes, {
+      status: 200,
+      headers: { 'content-type': 'application/zip' }
+    })) as typeof fetch;
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        source: {
+          type: 'url',
+          value: 'https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/addon-latest.xpi'
+        }
+      })
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/json');
+  });
+
+  it('returns SSE progress events for upload when Accept: text/event-stream is set', async () => {
+    const zipBytes = buildManifestZip();
+    const file = new File([zipBytes], 'extension.zip', { type: 'application/zip' });
+    const formData = new FormData();
+    formData.set('file', file);
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze/upload', {
+      method: 'POST',
+      headers: {
+        'accept': 'text/event-stream'
+      },
+      body: formData
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+
+    const text = await response.text();
+    const events = text.split('\n\n').filter(Boolean);
+
+    const progressEvents = events.filter(e => e.includes('event: progress'));
+    const resultEvents = events.filter(e => e.includes('event: result'));
+
+    expect(progressEvents.length).toBeGreaterThanOrEqual(2);
+    expect(resultEvents.length).toBe(1);
+  });
 });

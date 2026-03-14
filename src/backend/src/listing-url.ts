@@ -17,6 +17,20 @@ function findFirefoxSlug(pathname: string): string | null {
   return slug ? decodeURIComponent(slug) : null;
 }
 
+function findEdgeId(pathname: string): string | null {
+  const segments = pathname.split('/').filter(Boolean);
+  // Edge URLs: /addons/detail/{name-slug}/{extension-id}
+  const detailIndex = segments.findIndex((segment) => segment === 'detail');
+  if (detailIndex < 0 || detailIndex >= segments.length - 1) {
+    return null;
+  }
+
+  // The ID is the last segment after 'detail', possibly after a name slug
+  const candidates = segments.slice(detailIndex + 1);
+  const maybeId = candidates.find((segment) => CHROME_EXTENSION_ID_REGEX.test(segment.toLowerCase()));
+  return maybeId ? maybeId.toLowerCase() : null;
+}
+
 export function resolveListingUrlToId(listingUrl: URL): string | null {
   const host = listingUrl.hostname.toLowerCase();
 
@@ -28,6 +42,11 @@ export function resolveListingUrlToId(listingUrl: URL): string | null {
   if (host === 'addons.mozilla.org') {
     const firefoxSlug = findFirefoxSlug(listingUrl.pathname);
     return firefoxSlug ? `firefox:${firefoxSlug}` : null;
+  }
+
+  if (host === 'microsoftedge.microsoft.com') {
+    const edgeId = findEdgeId(listingUrl.pathname);
+    return edgeId ? `edge:${edgeId}` : null;
   }
 
   return null;

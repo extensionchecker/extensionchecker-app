@@ -23,4 +23,9 @@ describe('validatePublicFetchUrl', () => {
   it('rejects unsupported public domains', () => {
     expect(validatePublicFetchUrl('https://example.com/file.zip').ok).toBe(false);
   });
+
+  it('accepts Edge Add-ons and Edge update URLs', () => {
+    expect(validatePublicFetchUrl('https://microsoftedge.microsoft.com/addons/detail/ublock/nffknjpglkklphnibdiadeeeeailfnog').ok).toBe(true);
+    expect(validatePublicFetchUrl('https://edge.microsoft.com/extensionwebstorebase/v1/crx?response=redirect&x=test').ok).toBe(true);
+  });
 });

@@ -41,7 +41,8 @@
 				"GitHub.copilot",
 				"GitHub.copilot-chat",
 				"github.vscode-github-actions",
-				"yzhang.markdown-all-in-one"
+				"yzhang.markdown-all-in-one",
+				"openai.chatgpt"
 			]
 		}
 	},

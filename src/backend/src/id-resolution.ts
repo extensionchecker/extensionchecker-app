@@ -1,7 +1,7 @@
 import type { PackageKind } from './archive';
 
 const CHROME_EXTENSION_ID_REGEX = /^[a-p]{32}$/;
-const SOURCE_PREFIX_REGEX = /^(?<ecosystem>chrome|firefox|safari):(?<rawId>.+)$/i;
+const SOURCE_PREFIX_REGEX = /^(?<ecosystem>chrome|firefox|safari|edge):(?<rawId>.+)$/i;
 const SAFARI_APP_STORE_ID_REGEX = /^id\d{6,}$/i;
 
 export type ResolvedExtensionId = {
@@ -44,6 +44,23 @@ function resolveFirefoxId(rawId: string): ResolvedExtensionId {
   };
 }
 
+function resolveEdgeId(rawId: string): ResolvedExtensionId {
+  const trimmedId = rawId.trim().toLowerCase();
+  if (!CHROME_EXTENSION_ID_REGEX.test(trimmedId)) {
+    throw new Error('Edge extension IDs must be 32 characters using letters a-p.');
+  }
+
+  const updateUrl = new URL('https://edge.microsoft.com/extensionwebstorebase/v1/crx');
+  updateUrl.searchParams.set('response', 'redirect');
+  updateUrl.searchParams.set('x', `id=${trimmedId}&installsource=ondemand&uc`);
+
+  return {
+    canonicalId: trimmedId,
+    downloadUrl: updateUrl,
+    packageKind: 'crx'
+  };
+}
+
 export function resolveExtensionIdToPackage(rawInput: string): ResolvedExtensionId {
   const input = rawInput.trim();
   if (!input) {
@@ -60,6 +77,10 @@ export function resolveExtensionIdToPackage(rawInput: string): ResolvedExtension
 
     if (ecosystem.toLowerCase() === 'chrome') {
       return resolveChromeId(rawId);
+    }
+
+    if (ecosystem.toLowerCase() === 'edge') {
+      return resolveEdgeId(rawId);
     }
 
     if (ecosystem.toLowerCase() === 'safari') {

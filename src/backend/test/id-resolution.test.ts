@@ -29,4 +29,17 @@ describe('resolveExtensionIdToPackage', () => {
   it('rejects raw safari app-store style ids with actionable guidance', () => {
     expect(() => resolveExtensionIdToPackage('id1569813296')).toThrowError(/Safari App Store IDs/);
   });
+
+  it('resolves edge prefixed IDs to Edge update endpoint', () => {
+    const resolved = resolveExtensionIdToPackage('edge:nffknjpglkklphnibdiadeeeeailfnog');
+
+    expect(resolved.packageKind).toBe('crx');
+    expect(resolved.canonicalId).toBe('nffknjpglkklphnibdiadeeeeailfnog');
+    expect(resolved.downloadUrl.hostname).toBe('edge.microsoft.com');
+    expect(resolved.downloadUrl.pathname).toContain('/extensionwebstorebase/v1/crx');
+  });
+
+  it('rejects malformed edge prefix IDs', () => {
+    expect(() => resolveExtensionIdToPackage('edge:not-valid')).toThrowError(/32 characters/);
+  });
 });

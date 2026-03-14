@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import type { AnalysisReport, RiskSignal, Severity } from '@extensionchecker/shared';
+import type { AnalysisProgressEvent, AnalysisReport, RiskSignal, Severity, StoreMetadata } from '@extensionchecker/shared';
 import { analyzeExtensionById, analyzeExtensionByUpload, analyzeExtensionByUrl } from './api';
 import { buildPermissionDetails } from './permission-explainer';
 import { resolveExtensionDisplayName } from './report-display';
 
 type ThemePreference = 'system' | 'light' | 'dark';
 type SubmissionMode = 'url' | 'id' | 'file';
-type ResultTab = 'overview' | 'findings' | 'phases';
+type ResultTab = 'overview' | 'findings' | 'metadata' | 'phases';
 type PhaseStatus = 'complete' | 'not-available';
 type Tone = 'info' | 'good' | 'caution' | 'danger';
 type AppRoute = 'scan' | 'results';
@@ -108,6 +108,10 @@ function sourceStoreLabel(report: AnalysisReport): string {
       return 'Firefox Add-ons';
     }
 
+    if (value.startsWith('edge:')) {
+      return 'Edge Add-ons';
+    }
+
     if (value.startsWith('safari:')) {
       return 'Safari Extensions';
     }
@@ -125,6 +129,10 @@ function sourceStoreLabel(report: AnalysisReport): string {
 
     if (host.includes('addons.mozilla.org')) {
       return 'Firefox Add-ons';
+    }
+
+    if (host.includes('microsoftedge.microsoft.com') || host.includes('edge.microsoft.com')) {
+      return 'Edge Add-ons';
     }
 
     if (host.includes('safari') || host.includes('apple.com')) {
@@ -169,6 +177,14 @@ function sourceListingUrl(report: AnalysisReport): string | null {
       const addOnId = raw.replace(/^firefox:/, '');
       return addOnId ? `https://addons.mozilla.org/firefox/addon/${encodeURIComponent(addOnId)}/` : null;
     }
+
+    if (raw.startsWith('edge:')) {
+      const id = raw.replace(/^edge:/, '');
+      if (/^[a-p]{32}$/.test(id)) {
+        return `https://microsoftedge.microsoft.com/addons/detail/${id}`;
+      }
+      return null;
+    }
   }
 
   return null;
@@ -208,6 +224,18 @@ function isSafariStoreInputUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function explainSignalImpact(signal: RiskSignal): string {
@@ -311,6 +339,7 @@ export function App(): JSX.Element {
   const [activeTab, setActiveTab] = useState<ResultTab>('overview');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [progress, setProgress] = useState<AnalysisProgressEvent | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const safariIdHint = useMemo(() => (mode === 'id' ? isLikelySafariExtensionId(extensionId) : false), [mode, extensionId]);
   const chromeIdFormatHint = useMemo(() => {
@@ -452,13 +481,18 @@ export function App(): JSX.Element {
 
     setIsSubmitting(true);
     setError(null);
+    setProgress(null);
+
+    const onProgress = (evt: AnalysisProgressEvent): void => {
+      setProgress(evt);
+    };
 
     try {
       const nextReport = mode === 'url'
-        ? await analyzeExtensionByUrl(url)
+        ? await analyzeExtensionByUrl(url, onProgress)
         : mode === 'id'
-          ? await analyzeExtensionById(extensionId)
-          : await analyzeExtensionByUpload(uploadFile as File);
+          ? await analyzeExtensionById(extensionId, onProgress)
+          : await analyzeExtensionByUpload(uploadFile as File, onProgress);
 
       setReport(nextReport);
       setActiveTab('overview');
@@ -468,6 +502,7 @@ export function App(): JSX.Element {
       setError(submitError instanceof Error ? submitError.message : 'Unexpected error');
     } finally {
       setIsSubmitting(false);
+      setProgress(null);
     }
   }, [canSubmit, extensionId, mode, navigateTo, resultsQuery, uploadFile, url]);
 
@@ -546,13 +581,13 @@ export function App(): JSX.Element {
                   <input
                     id="url"
                     type="url"
-                    placeholder="https://chromewebstore.google.com/detail/... or https://addons.mozilla.org/firefox/addon/..."
+                    placeholder="https://chromewebstore.google.com/detail/... or https://addons.mozilla.org/firefox/addon/... or https://microsoftedge.microsoft.com/addons/detail/..."
                     value={url}
                     onChange={(event) => setUrl(event.target.value)}
                     required
                   />
                   <p className="field-hint">
-                    Supported URL sources: <code>chromewebstore.google.com</code>, <code>chrome.google.com</code>, <code>clients2.google.com</code>, and <code>addons.mozilla.org</code>.
+                    Supported URL sources: <code>chromewebstore.google.com</code>, <code>chrome.google.com</code>, <code>clients2.google.com</code>, <code>addons.mozilla.org</code>, and <code>microsoftedge.microsoft.com</code>.
                     Safari App Store pages (<code>apps.apple.com</code>) cannot be analyzed directly from URL because Apple does not expose extension package downloads from listings.
                   </p>
                   {safariUrlHint ? (
@@ -575,7 +610,7 @@ export function App(): JSX.Element {
                     required
                   />
                   <p className="field-hint">
-                    Chrome IDs must be 32 characters using letters <code>a</code>-<code>p</code>. Firefox supports add-on slugs or <code>firefox:&lt;id&gt;</code>.
+                    Chrome IDs must be 32 characters using letters <code>a</code>-<code>p</code>. Firefox supports add-on slugs or <code>firefox:&lt;id&gt;</code>. Edge supports <code>edge:&lt;id&gt;</code> (32-character ID).
                   </p>
                   {chromeIdFormatHint ? (
                     <p className="field-hint warning">
@@ -608,7 +643,7 @@ export function App(): JSX.Element {
                   {isSubmitting ? (
                     <span className="button-loading">
                       <span className="button-spinner" aria-hidden="true" />
-                      Analyzing...
+                      {progress ? progress.message : 'Analyzing\u2026'}
                     </span>
                   ) : (
                     <>
@@ -618,6 +653,14 @@ export function App(): JSX.Element {
                   )}
                 </span>
               </button>
+              {isSubmitting && progress ? (
+                <div className="analysis-progress" role="progressbar" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100} aria-label={progress.message}>
+                  <div className="analysis-progress-track">
+                    <div className="analysis-progress-fill" style={{ width: `${progress.percent}%` }} />
+                  </div>
+                  <span className="analysis-progress-label">{progress.message}</span>
+                </div>
+              ) : null}
             </form>
             {error ? <p className="error">{error}</p> : null}
           </section>
@@ -703,6 +746,18 @@ export function App(): JSX.Element {
               >
                 <span className="material-symbols-outlined" aria-hidden="true">warning</span>
                 <span className="result-tab-label">Findings</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="result-tab-metadata"
+                aria-selected={activeTab === 'metadata'}
+                aria-controls="result-panel-metadata"
+                className={`result-tab ${activeTab === 'metadata' ? 'active' : ''}`}
+                onClick={() => setActiveTab('metadata')}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">info</span>
+                <span className="result-tab-label">Metadata</span>
               </button>
               <button
                 type="button"
@@ -829,6 +884,157 @@ export function App(): JSX.Element {
                       ))}
                     </ul>
                   )}
+                </section>
+              </section>
+            ) : null}
+
+            {activeTab === 'metadata' ? (
+              <section id="result-panel-metadata" role="tabpanel" aria-labelledby="result-tab-metadata" className="result-panel">
+                <section className="metadata-section">
+                  <h3>Extension Metadata</h3>
+                  <div className="metadata-grid">
+                    <article className="info-card info">
+                      <h4>Package Details</h4>
+                      <dl className="metadata-list">
+                        <dt>Extension Name</dt>
+                        <dd>{report.metadata.name}</dd>
+                        <dt>Version</dt>
+                        <dd>{report.metadata.version}</dd>
+                        <dt>Manifest Version</dt>
+                        <dd>MV{report.metadata.manifestVersion}</dd>
+                        {report.storeMetadata?.shortName ? (
+                          <>
+                            <dt>Short Name</dt>
+                            <dd>{report.storeMetadata.shortName}</dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata?.packageSizeBytes ? (
+                          <>
+                            <dt>Package Size</dt>
+                            <dd>{formatBytes(report.storeMetadata.packageSizeBytes)}</dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    </article>
+
+                    <article className="info-card info">
+                      <h4>Developer Information</h4>
+                      <dl className="metadata-list">
+                        {report.storeMetadata?.author ? (
+                          <>
+                            <dt>Author</dt>
+                            <dd>{report.storeMetadata.author}</dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata?.developerName ? (
+                          <>
+                            <dt>Developer</dt>
+                            <dd>{report.storeMetadata.developerName}</dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata?.developerUrl ? (
+                          <>
+                            <dt>Developer Website</dt>
+                            <dd>
+                              <a href={report.storeMetadata.developerUrl} target="_blank" rel="noopener noreferrer">
+                                {report.storeMetadata.developerUrl}
+                              </a>
+                            </dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata?.homepageUrl ? (
+                          <>
+                            <dt>Homepage</dt>
+                            <dd>
+                              <a href={report.storeMetadata.homepageUrl} target="_blank" rel="noopener noreferrer">
+                                {report.storeMetadata.homepageUrl}
+                              </a>
+                            </dd>
+                          </>
+                        ) : null}
+                        {!report.storeMetadata?.author && !report.storeMetadata?.developerName && !report.storeMetadata?.developerUrl && !report.storeMetadata?.homepageUrl ? (
+                          <p className="empty-signals">No developer information available in the manifest.</p>
+                        ) : null}
+                      </dl>
+                    </article>
+
+                    <article className="info-card info">
+                      <h4>Store &amp; Source</h4>
+                      <dl className="metadata-list">
+                        <dt>Submission Source</dt>
+                        <dd>{sourceStoreLabel(report)}</dd>
+                        {report.storeMetadata?.storeUrl ? (
+                          <>
+                            <dt>Store Listing</dt>
+                            <dd>
+                              <a href={report.storeMetadata.storeUrl} target="_blank" rel="noopener noreferrer">
+                                {report.storeMetadata.storeUrl}
+                              </a>
+                            </dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata?.category ? (
+                          <>
+                            <dt>Category</dt>
+                            <dd>{report.storeMetadata.category}</dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata?.rating !== undefined ? (
+                          <>
+                            <dt>Rating</dt>
+                            <dd>{report.storeMetadata.rating.toFixed(1)} / 5{report.storeMetadata.ratingCount !== undefined ? ` (${report.storeMetadata.ratingCount.toLocaleString()} ratings)` : ''}</dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata?.userCount !== undefined ? (
+                          <>
+                            <dt>Users</dt>
+                            <dd>{report.storeMetadata.userCount.toLocaleString()}</dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata?.lastUpdated ? (
+                          <>
+                            <dt>Last Updated</dt>
+                            <dd>{report.storeMetadata.lastUpdated}</dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    </article>
+                  </div>
+
+                  {report.storeMetadata?.description ? (
+                    <article className="info-card info metadata-description">
+                      <h4>Extension Description</h4>
+                      <p>{report.storeMetadata.description}</p>
+                    </article>
+                  ) : null}
+
+                  {report.storeMetadata?.privacyPolicyUrl || report.storeMetadata?.supportUrl ? (
+                    <article className="info-card info">
+                      <h4>Additional Links</h4>
+                      <dl className="metadata-list">
+                        {report.storeMetadata.privacyPolicyUrl ? (
+                          <>
+                            <dt>Privacy Policy</dt>
+                            <dd>
+                              <a href={report.storeMetadata.privacyPolicyUrl} target="_blank" rel="noopener noreferrer">
+                                {report.storeMetadata.privacyPolicyUrl}
+                              </a>
+                            </dd>
+                          </>
+                        ) : null}
+                        {report.storeMetadata.supportUrl ? (
+                          <>
+                            <dt>Support</dt>
+                            <dd>
+                              <a href={report.storeMetadata.supportUrl} target="_blank" rel="noopener noreferrer">
+                                {report.storeMetadata.supportUrl}
+                              </a>
+                            </dd>
+                          </>
+                        ) : null}
+                      </dl>
+                    </article>
+                  ) : null}
                 </section>
               </section>
             ) : null}

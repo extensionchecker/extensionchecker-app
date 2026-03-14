@@ -103,7 +103,7 @@ These multiple input methods are essential because store retrieval workflows are
 
 ### Supported Browser Ecosystems
 
-The first release must target Chrome-compatible extensions, Firefox add-ons, and Safari-related extension analysis in a practical, standards-aware way. Chrome-compatible in this context includes Chromium-based browser ecosystems where extension package structure is sufficiently similar for the same analysis model to be useful. Firefox support is a first-class requirement. Safari support is also an initial requirement, but it must be implemented honestly with attention to packaging and distribution differences rather than as a superficial checkbox.
+The first release must target Chrome-compatible extensions, Firefox add-ons, Microsoft Edge add-ons, and Safari-related extension analysis in a practical, standards-aware way. Chrome-compatible in this context includes Chromium-based browser ecosystems where extension package structure is sufficiently similar for the same analysis model to be useful. Microsoft Edge extensions are Chromium-based and use the same CRX package format as Chrome; Edge add-ons are supported for both listing URL and extension ID submission via the Edge store and Microsoft update API. Firefox support is a first-class requirement. Safari support is also an initial requirement, but it must be implemented honestly with attention to packaging and distribution differences rather than as a superficial checkbox. Safari extensions are distributed as macOS apps through the App Store; there is no publicly downloadable extension package from Safari listing pages, so Safari is upload-only.
 
 ### Analysis Scope for Version One
 
@@ -116,6 +116,12 @@ The first release may include lightweight structural or static checks where they
 The application must return a rich, intuitive, and obvious report that helps users understand what the extension can access and what that implies. The report should include extension metadata when available, requested permissions, host permissions, derived capabilities, notable risk signals, a risk score or severity model, and a concise plain-English summary.
 
 The report must make dangerous combinations easy to identify. For example, broad host access combined with content script injection or cookie access should be explained in direct language. The user should not need security expertise to understand the significance of the findings.
+
+### Store and Package Metadata
+
+The report must include a dedicated Metadata section (rendered as a tab in the UI) that surfaces all available background information about the analyzed extension. This includes metadata extracted from the manifest (description, developer name, developer URL, homepage URL) and metadata derived from the package itself (file size). When the extension was submitted via a store listing URL or resolved extension ID, the report must include the store listing URL for reference.
+
+The Metadata section serves a complementary purpose to risk analysis: it helps users understand who built the extension, how large it is, what it claims to do, and where to find more information. Developer website URLs may be used in future versions as inputs for developer vetting signals (domain age, certificate health, WHOIS data), but the initial implementation must at minimum surface the raw metadata that is available from the manifest and package.
 
 ## Scoring and Standards
 
@@ -251,6 +257,6 @@ Later revisions of this PRD may define the exact JSON report schema, exact sever
 
 ## Summary
 
-ExtensionChecker is a public-good, open source browser extension analysis tool designed to help users understand extension risk quickly and clearly. The `extensionchecker-app` repository will be a monorepo with all code under `src/`, containing frontend, backend, engine, and shared packages. It will support URL submission, identifier submission, and file upload; target Chrome-compatible ecosystems, Firefox, and Safari in a practical way; run locally in a VS Code Dev Container; deploy publicly using Cloudflare Pages plus a single Worker; and prioritize explainable, manifest-first risk analysis over opaque or over-engineered complexity.
+ExtensionChecker is a public-good, open source browser extension analysis tool designed to help users understand extension risk quickly and clearly. The `extensionchecker-app` repository will be a monorepo with all code under `src/`, containing frontend, backend, engine, and shared packages. It will support URL submission, identifier submission, and file upload; target Chrome-compatible ecosystems, Microsoft Edge, Firefox, and Safari in a practical way; run locally in a VS Code Dev Container; deploy publicly using Cloudflare Pages plus a single Worker; and prioritize explainable, manifest-first risk analysis over opaque or over-engineered complexity.
 
 The first version should be disciplined, useful, portable, and honest about its limits. If it does those things well, it will already provide meaningful value.
