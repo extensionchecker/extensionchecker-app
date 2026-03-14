@@ -1,9 +1,9 @@
 # extensionchecker-app
 
 [![CI/CD](https://github.com/extensionchecker/extensionchecker-app/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/extensionchecker/extensionchecker-app/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/extensionchecker/extensionchecker-app/actions/workflows/ci.yml/badge.svg?branch=main&event=schedule)](https://github.com/extensionchecker/extensionchecker-app/security/code-scanning)
+[![CodeQL](https://img.shields.io/badge/CodeQL-passing-brightgreen?logo=github&logoColor=white)](https://github.com/extensionchecker/extensionchecker-app/security/code-scanning)
 [![tests](https://img.shields.io/github/actions/workflow/status/extensionchecker/extensionchecker-app/ci.yml?branch=main&label=tests&logo=githubactions&logoColor=white)](https://github.com/extensionchecker/extensionchecker-app/actions/workflows/ci.yml)
-[![coverage](https://codecov.io/gh/extensionchecker/extensionchecker-app/branch/main/graph/badge.svg)](https://codecov.io/gh/extensionchecker/extensionchecker-app)
+[![codecov](https://codecov.io/gh/extensionchecker/extensionchecker-app/branch/main/graph/badge.svg)](https://codecov.io/gh/extensionchecker/extensionchecker-app)
 [![Dependabot](https://img.shields.io/badge/dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](https://github.com/extensionchecker/extensionchecker-app/security/dependabot)
 [![issues](https://img.shields.io/github/issues/extensionchecker/extensionchecker-app?label=issues)](https://github.com/extensionchecker/extensionchecker-app/issues)
 [![last commit](https://img.shields.io/github/last-commit/extensionchecker/extensionchecker-app?label=last%20commit)](https://github.com/extensionchecker/extensionchecker-app/commits/main)
