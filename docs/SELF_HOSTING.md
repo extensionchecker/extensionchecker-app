@@ -200,6 +200,33 @@ You are **not** required to:
 - Link back to the official project (though we appreciate it)
 - Open-source your modifications (though we encourage contributing upstream)
 
+## Package Size & Safety
+
+The backend enforces the following limits on extension archives. These are
+designed to protect the Cloudflare Worker runtime, not to restrict legitimate
+extensions — real-world extensions rarely approach these ceilings.
+
+| Limit | Value | Notes |
+|-------|-------|-------|
+| Maximum compressed package size | 80 MB | Enforced on both uploads and remote downloads |
+| Maximum ZIP entry count | 5,000 | Rejects adversarial central-directory exhaustion |
+| Maximum decompressed size per file | 5 MB | Applies only to `manifest.json` and locale files |
+| Maximum compression ratio per file | 1,000:1 | Zip bomb detection |
+
+Importantly, the backend uses **selective decompression**: only `manifest.json`
+and `_locales/**` locale files are ever inflated into memory. The rest of the
+extension archive (JavaScript bundles, icons, filter lists, etc.) is read at
+the ZIP metadata level and discarded. This means even a large extension whose
+total uncompressed content is 50 MB or more can be analyzed with minimal
+memory — the Worker only allocates memory for the compressed archive bytes
+plus the small files it actually needs.
+
+If you are self-hosting and need to analyze unusually large extensions
+consistently, you may raise `MAX_PACKAGE_SIZE_BYTES` in
+`src/backend/src/constants.ts`. The entry count and per-file limits in
+`src/backend/src/archive.ts` can also be adjusted, but raising them increases
+exposure to adversarial inputs if your instance is publicly accessible.
+
 ## Troubleshooting
 
 ### "Service binding not found" error

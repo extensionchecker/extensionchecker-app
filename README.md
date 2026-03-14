@@ -80,6 +80,31 @@ The frontend proxies `/api/*` to the backend via a Cloudflare service binding
 in production, or Vite's dev proxy locally. The engine runs in-process — it is
 imported by the backend, not called over the network.
 
+### Package processing
+
+Extension archives (`.crx`, `.xpi`, `.zip`) are held entirely in memory for
+the duration of a request — Cloudflare Workers have no filesystem. The backend
+uses selective decompression: only `manifest.json` and `_locales/**` locale
+files are inflated. Everything else in the archive (filter lists, JavaScript
+bundles, icons, etc.) is read at the ZIP central-directory level but never
+decompressed. This keeps per-request memory proportional to the *compressed*
+package size rather than the full uncompressed size, which is why
+heavyweight extensions like uBlock Origin (≈ 6 MB compressed, ≈ 50 MB
+uncompressed) can be analyzed without hitting Cloudflare's Worker memory
+limit.
+
+Before decompression begins, every archive is validated against a set of
+safety checks designed to reject adversarial inputs:
+
+| Check | Threshold | What it prevents |
+|---|---|---|
+| Entry count | 5,000 max | Central-directory exhaustion attacks |
+| Filename null bytes | Any | Parser-confusion attacks (`file.json\0.exe`) |
+| Path traversal | Detected | `../` or absolute paths that escape the archive root |
+| Compression ratio | 1,000:1 max per file | Classic zip bombs |
+| Decompressed file size | 5 MB max per file | Memory exhaustion from a single inflated entry |
+| Total compressed package | 80 MB max | Upstream download and upload size cap |
+
 ---
 
 ## License

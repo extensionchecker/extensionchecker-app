@@ -207,6 +207,19 @@ The codebase should include enough documentation for contributors to understand 
 
 This project exists in the security space, so it must be developed with appropriate care. Uploaded packages and remote retrieval workflows must be handled defensively. Archive parsing, file handling, and any untrusted input processing must be implemented carefully. Resource limits, validation, and error handling should be designed deliberately.
 
+### Archive Handling Design
+
+Extension archives must never be fully decompressed into memory. The backend must use selective decompression — only the files required for analysis (`manifest.json` and locale files) should be inflated. All other archive entries should be inspected at the ZIP central-directory level but discarded without decompression. This approach keeps per-request memory usage proportional to the compressed package size rather than the total uncompressed size, which is critical for large extensions running inside Cloudflare Workers.
+
+Before any decompression is attempted, every archive must be validated against the following checks. Any failure must result in a clear error response to the user rather than a silent failure or a resource-limit termination:
+
+- **Entry count limit**: Archives with more than 5,000 entries are rejected outright. A legitimate browser extension does not need thousands of entries; an entry count this high most likely indicates a crafted archive designed to exhaust central-directory parsing.
+- **Null byte filename rejection**: Any entry whose filename contains a null byte is rejected. Null bytes in filenames are used in parser-confusion attacks and have no legitimate use inside an extension archive.
+- **Path traversal rejection**: Any entry whose filename begins with an absolute path (`/`) or contains directory traversal segments (`../`) is rejected. If the backend ever writes files to disk in the future, this defense prevents escape from any extraction sandbox.
+- **Compression ratio limit**: Any entry claiming an uncompressed size more than 1,000 times its compressed size is rejected before decompression. This is the primary zip bomb defense.
+- **Per-file decompressed size limit**: Even for files that pass the ratio check, any entry claiming an uncompressed size greater than 5 MB is rejected. A `manifest.json` or locale file legitimately has no reason to be this large.
+- **Total package size limit**: The backend rejects any upload or remote download that exceeds 80 MB compressed. This limit is enforced before the archive is parsed.
+
 ### Privacy Posture
 
 The public service should minimize unnecessary data retention. The product should be transparent about what is stored, what is cached, and what is temporary. If scan results are cached, that should be disclosed. If uploaded packages are transient and discarded after processing, that should also be disclosed clearly.
