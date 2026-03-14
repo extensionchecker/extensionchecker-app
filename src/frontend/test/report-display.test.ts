@@ -111,4 +111,153 @@ describe('resolveExtensionDisplayName', () => {
 
     expect(resolveExtensionDisplayName(report)).toBe('%E0%A4%A');
   });
+
+  it('falls back to edge listing slug from Edge store URL', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'url',
+      value: 'https://microsoftedge.microsoft.com/addons/detail/dark-reader/ifoakfbpdcdoeenechcleahebpibofpc'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Dark Reader');
+  });
+
+  it('falls back to last URL segment for unknown store URLs', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'url',
+      value: 'https://example.com/path/my-cool-addon'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('My Cool Addon');
+  });
+
+  it('returns null for URLs with no path segments', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'url',
+      value: 'https://some-bare-host.com'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Extension name unavailable');
+  });
+
+  it('returns null for completely invalid URLs', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'url',
+      value: 'not-a-url-at-all'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Extension name unavailable');
+  });
+
+  it('falls back to edge label for edge: prefixed chrome-pattern ID', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'id',
+      value: 'edge:abcdefghijklmnopabcdefghijklmnop'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Edge Extension (abcdefgh...)');
+  });
+
+  it('falls back to normalized label for edge: prefixed non-chrome ID', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'id',
+      value: 'edge:dark-reader'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Dark Reader');
+  });
+
+  it('normalizes chrome: prefixed non-chrome-pattern ID', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'id',
+      value: 'chrome:my-extension-name'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('My Extension Name');
+  });
+
+  it('falls back to chrome identifier for chrome: prefixed chrome-pattern ID', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'id',
+      value: 'chrome:abcdefghijklmnopabcdefghijklmnop'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Chrome Extension (abcdefgh...)');
+  });
+
+  it('normalizes camelCase filenames from upload', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'file',
+      filename: 'myAwesomeExtension.crx',
+      mimeType: 'application/x-chrome-extension'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('My Awesome Extension');
+  });
+
+  it('normalizes underscored filenames from upload', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'file',
+      filename: 'my_cool_extension.zip',
+      mimeType: 'application/zip'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('My Cool Extension');
+  });
+
+  it('normalizes filenames with @ symbols', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'file',
+      filename: '@scope+my-extension.zip',
+      mimeType: 'application/zip'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Scope My Extension');
+  });
+
+  it('returns null for filenames that normalize to empty strings', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'file',
+      filename: '...',
+      mimeType: 'application/zip'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Extension name unavailable');
+  });
+
+  it('returns null for filenames that are just chrome extension IDs', () => {
+    const report = buildReport('__MSG_name__', {
+      type: 'file',
+      filename: 'abcdefghijklmnopabcdefghijklmnop.zip',
+      mimeType: 'application/zip'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Extension name unavailable');
+  });
+
+  it('detects unresolved localized names with substring match', () => {
+    const report = buildReport('prefix __MSG_name__ suffix', {
+      type: 'url',
+      value: 'https://example.com/my-ext'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('My Ext');
+  });
+
+  it('uses manifest name when it is valid and not localized', () => {
+    const report = buildReport('  Trimmed Name  ', {
+      type: 'url',
+      value: 'https://example.com'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Trimmed Name');
+  });
+
+  it('falls back to source for empty ID', () => {
+    const report = buildReport('', {
+      type: 'id',
+      value: 'firefox:ublock'
+    });
+
+    expect(resolveExtensionDisplayName(report)).toBe('Ublock');
+  });
 });

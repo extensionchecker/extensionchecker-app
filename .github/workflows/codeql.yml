@@ -1,4 +1,8 @@
+# CodeQL static security analysis for JavaScript and TypeScript.
+# Runs on every pull request, push to main, and weekly (Tuesday 03:23 UTC).
+
 name: CodeQL
+run-name: "CodeQL — ${{ github.event_name == 'schedule' && 'weekly scan' || github.event_name == 'push' && github.ref_name || github.head_ref || 'manual' }}"
 
 on:
   push:

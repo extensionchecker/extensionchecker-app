@@ -145,5 +145,171 @@ describe('frontend api client', () => {
     const report = await analyzeExtensionByUrl('https://example.com/extension.zip', () => {});
     expect(report.metadata.name).toBe('API Test Extension');
   });
+
+  it('throws when SSE stream ends without a result event', async () => {
+    const sseBody = [
+      'event: progress\ndata: {"step":"resolving","message":"Working…","percent":10}\n\n'
+    ].join('');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }));
+
+    await expect(
+      analyzeExtensionByUrl('https://example.com/extension.zip', () => {})
+    ).rejects.toThrow('Backend stream ended without a result.');
+  });
+
+  it('throws on SSE result event with malformed report payload', async () => {
+    const sseBody = [
+      `event: result\ndata: {"broken":true}\n\n`
+    ].join('');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }));
+
+    await expect(
+      analyzeExtensionByUrl('https://example.com/extension.zip', () => {})
+    ).rejects.toThrow('Backend returned a malformed report payload.');
+  });
+
+  it('skips SSE blocks with empty event type or data', async () => {
+    const sseBody = [
+      'event: \ndata: {"step":"resolving","message":"Resolving…","percent":10}\n\n',
+      'event: progress\ndata: \n\n',
+      'data: {"step":"resolving","message":"Resolving…","percent":10}\n\n',
+      `event: result\ndata: ${JSON.stringify(baseReport)}\n\n`
+    ].join('');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }));
+
+    const events: AnalysisProgressEvent[] = [];
+    const report = await analyzeExtensionByUrl('https://example.com/extension.zip', (evt) => events.push(evt));
+    expect(report.metadata.name).toBe('API Test Extension');
+    expect(events.length).toBe(0);
+  });
+
+  it('skips SSE blocks with malformed JSON data', async () => {
+    const sseBody = [
+      'event: progress\ndata: {not-json}\n\n',
+      `event: result\ndata: ${JSON.stringify(baseReport)}\n\n`
+    ].join('');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }));
+
+    const report = await analyzeExtensionByUrl('https://example.com/extension.zip', () => {});
+    expect(report.metadata.name).toBe('API Test Extension');
+  });
+
+  it('skips progress events that fail schema validation', async () => {
+    const sseBody = [
+      'event: progress\ndata: {"invalid":true}\n\n',
+      `event: result\ndata: ${JSON.stringify(baseReport)}\n\n`
+    ].join('');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }));
+
+    const events: AnalysisProgressEvent[] = [];
+    const report = await analyzeExtensionByUrl('https://example.com/extension.zip', (evt) => events.push(evt));
+    expect(report.metadata.name).toBe('API Test Extension');
+    expect(events.length).toBe(0);
+  });
+
+  it('throws when SSE stream body is null', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(null, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      })
+    );
+
+    await expect(
+      analyzeExtensionByUrl('https://example.com/extension.zip', () => {})
+    ).rejects.toThrow(/empty streaming response|stream ended without/);
+  });
+
+  it('throws for invalid JSON in a successful response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('not-json', {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow('Backend returned invalid JSON.');
+  });
+
+  it('throws generic error for failed response with empty body', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 500,
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow('Backend request failed with status 500.');
+  });
+
+  it('handles SSE error event with unknown format', async () => {
+    const sseBody = [
+      'event: error\ndata: {"unexpected":"format"}\n\n'
+    ].join('');
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }));
+
+    await expect(
+      analyzeExtensionByUrl('https://example.com/extension.zip', () => {})
+    ).rejects.toThrow('Unknown backend error.');
+  });
+
+  it('sends streaming headers for upload when onProgress is provided', async () => {
+    const sseBody = [
+      `event: result\ndata: ${JSON.stringify({
+        ...baseReport,
+        source: { type: 'file', filename: 'ext.zip', mimeType: 'application/zip' }
+      })}\n\n`
+    ].join('');
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }));
+
+    const file = new File(['abc'], 'ext.zip', { type: 'application/zip' });
+    await analyzeExtensionByUpload(file, () => {});
+
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect(init.headers).toEqual({ 'accept': 'text/event-stream' });
+  });
+
+  it('sends streaming headers for ID analysis when onProgress is provided', async () => {
+    const sseBody = [
+      `event: result\ndata: ${JSON.stringify({
+        ...baseReport,
+        source: { type: 'id', value: 'abcdefghijklmnopabcdefghijklmnop' }
+      })}\n\n`
+    ].join('');
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(sseBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' }
+    }));
+
+    await analyzeExtensionById('abcdefghijklmnopabcdefghijklmnop', () => {});
+
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>)['accept']).toBe('text/event-stream');
+  });
 });
 
