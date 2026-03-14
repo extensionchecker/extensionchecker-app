@@ -40,7 +40,7 @@ function injectTokenHeader(request: Request, token: string | undefined): Request
   }
   const headers = new Headers(request.headers);
   headers.set('x-extensionchecker-token', token.trim());
-  return new Request(request.url, { ...request, headers });
+  return new Request(request, { headers });
 }
 
 export async function handleFrontendWorkerRequest(request: Request, env: FrontendWorkerEnv): Promise<Response> {
