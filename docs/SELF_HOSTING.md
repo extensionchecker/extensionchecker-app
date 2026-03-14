@@ -1,0 +1,201 @@
+# Self-Hosting Guide
+
+This guide walks you through deploying your own instance of ExtensionChecker
+on Cloudflare Workers. The entire stack runs on Cloudflare's free tier.
+
+## Prerequisites
+
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier is
+  sufficient)
+- A domain name managed by Cloudflare DNS (or use the free
+  `*.workers.dev` subdomain)
+- [Node.js](https://nodejs.org/) 22+ installed locally
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/)
+  (`npm install -g wrangler`)
+
+## 1. Fork & Clone
+
+1. Fork [extensionchecker/extensionchecker-app](https://github.com/extensionchecker/extensionchecker-app)
+   on GitHub.
+2. Clone your fork locally:
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/extensionchecker-app.git
+   cd extensionchecker-app
+   ```
+
+## 2. Install Dependencies
+
+```bash
+cd src
+npm ci
+```
+
+## 3. Verify Locally
+
+Before deploying, make sure everything builds and passes:
+
+```bash
+npm run lint
+npm run test:coverage
+npm run build
+```
+
+Start the local dev servers to test end-to-end:
+
+```bash
+npm run dev
+```
+
+The frontend runs on `http://localhost:5173` and proxies API calls to the
+backend on `http://localhost:8787`.
+
+## 4. Configure Your Domains
+
+Edit the two `wrangler.toml` files to replace the official domains with your
+own. No application code changes are needed — the app uses only relative API
+paths.
+
+### Backend (`src/backend/wrangler.toml`)
+
+```toml
+[env.production]
+name = "your-app-backend"
+routes = [{ pattern = "api.yourdomain.com", custom_domain = true }]
+
+[env.production.vars]
+API_ALLOWED_ORIGINS = "https://app.yourdomain.com"
+API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
+```
+
+### Frontend (`src/frontend/wrangler.toml`)
+
+```toml
+[env.production]
+name = "your-app-frontend"
+routes = [{ pattern = "app.yourdomain.com", custom_domain = true }]
+
+[[env.production.services]]
+binding = "BACKEND"
+service = "your-app-backend"
+```
+
+The service binding name (`BACKEND`) must match exactly — it connects the
+frontend Worker to the backend Worker internally without a public network hop.
+
+> **No custom domain?** You can skip the `routes` lines entirely and use the
+> default `*.workers.dev` URLs that Cloudflare assigns. Just set
+> `API_ALLOWED_ORIGINS` to your frontend's `*.workers.dev` URL.
+
+## 5. Authenticate Wrangler
+
+```bash
+wrangler login
+```
+
+This opens a browser window to authorize Wrangler with your Cloudflare account.
+
+## 6. Deploy the Backend
+
+```bash
+cd src/backend
+wrangler deploy --env production
+```
+
+Note the URL that Wrangler prints — you'll need it if you're using
+`*.workers.dev` URLs instead of custom domains.
+
+## 7. Deploy the Frontend
+
+The frontend must be built before deploying:
+
+```bash
+cd src/frontend
+npm run build
+wrangler deploy --env production
+```
+
+## 8. Verify Your Deployment
+
+Visit your frontend URL in a browser. Submit an extension ID or URL and
+confirm the analysis completes.
+
+Check the health endpoint:
+
+```bash
+curl https://app.yourdomain.com/health
+```
+
+## Environment Variables
+
+All configuration is done through `wrangler.toml` `[vars]` sections or via the
+Cloudflare dashboard (Settings → Variables). See
+[docs/DEPLOYMENT.md](DEPLOYMENT.md) for the full reference.
+
+Key variables for self-hosters:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `API_ALLOWED_ORIGINS` | _(none)_ | Comma-separated origins allowed to call the API cross-origin. Set this to your frontend's public URL. |
+| `API_ACCESS_TOKEN` | _(none)_ | Optional shared secret. If set, callers must send `x-extensionchecker-token` header. |
+| `API_ALLOW_REQUESTS_WITHOUT_ORIGIN` | `"false"` | Allow requests with no `Origin` header (e.g., curl, server-to-server). Only enable on trusted networks. |
+| `API_RATE_LIMIT_PER_MINUTE_PER_IP` | `"30"` | Per-IP per-minute request cap. |
+| `API_RATE_LIMIT_PER_DAY_PER_IP` | `"2000"` | Per-IP daily request cap. |
+| `API_RATE_LIMIT_GLOBAL_PER_DAY` | `"90000"` | Global daily request cap across all users. |
+
+## Updating Your Instance
+
+To pull upstream improvements from the official repo:
+
+```bash
+git remote add upstream https://github.com/extensionchecker/extensionchecker-app.git
+git fetch upstream
+git merge upstream/main
+```
+
+Resolve any conflicts in your `wrangler.toml` files (your domain config will
+differ from upstream), rebuild, and redeploy.
+
+## License & Attribution
+
+ExtensionChecker is licensed under the [MIT License](../LICENSE). Under MIT
+you are free to:
+
+- Fork, modify, and deploy your own instance
+- Use it commercially or privately
+- Distribute modified versions
+
+The only requirement is that you **retain the original copyright notice and
+license text** in your copy. This is already in the `LICENSE` file — just
+don't remove it.
+
+You are **not** required to:
+
+- Use the ExtensionChecker name or branding
+- Link back to the official project (though we appreciate it)
+- Open-source your modifications (though we encourage contributing upstream)
+
+## Troubleshooting
+
+### "Service binding not found" error
+
+The frontend Worker references the backend by its Wrangler service name. Make
+sure:
+1. The backend is deployed first.
+2. The `service` value in the frontend's `[[env.production.services]]` matches
+   the backend's `name` in `[env.production]`.
+
+### CORS errors in the browser
+
+`API_ALLOWED_ORIGINS` must be set to the **exact** origin of your frontend
+(including `https://`, no trailing slash). Example:
+`https://app.yourdomain.com`
+
+### Rate limit errors
+
+Adjust the `API_RATE_LIMIT_*` variables in your backend `wrangler.toml`. On
+your own instance, you have full control over these limits.
+
+### Build fails locally
+
+Make sure you're on Node.js 22+ (`node --version`) and have run `npm ci` from
+the `src/` directory.

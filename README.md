@@ -11,71 +11,78 @@
 [![pull requests](https://img.shields.io/github/issues-pr/extensionchecker/extensionchecker-app?label=pull%20requests)](https://github.com/extensionchecker/extensionchecker-app/pulls)
 [![release](https://img.shields.io/github/v/release/extensionchecker/extensionchecker-app?display_name=tag&label=release)](https://github.com/extensionchecker/extensionchecker-app/releases)
 
-Monorepo for the ExtensionChecker scanner application.
+**An open-source, self-hostable browser extension risk analysis tool.**
+
+Submit a Chrome, Firefox, or Safari extension by store URL, extension ID, or
+uploaded package file and get a clear, structured, human-readable risk report.
+No opaque trust scores — every finding is traceable to evidence in the
+extension's manifest and code.
 
 <img src="docs/logo/icon.png" alt="ExtensionChecker logo" width="100" />
 
-## Packages
+> **Live instance**: [app.extensionchecker.org](https://app.extensionchecker.org)
+> — running on the Cloudflare Workers free tier. If you need higher throughput
+> or want full control, [self-host your own instance](docs/SELF_HOSTING.md).
 
-- `src/frontend`: Vite + React app deployed as a Cloudflare Worker static-assets frontend.
-- `src/backend`: Cloudflare Worker API for ingestion and report generation.
-- `src/engine`: Manifest-first analysis engine with deterministic risk scoring.
-- `src/shared`: Shared schemas and report contracts.
+---
 
-## Quick Start
+## For Contributors
 
-1. Install dependencies:
+Want to help improve ExtensionChecker? Start here:
+
+| Resource | Description |
+|----------|-------------|
+| [Contributing Guide](CONTRIBUTING.md) | Fork, setup, dev workflow, PR expectations |
+| [Style Guide](docs/STYLE_GUIDE.md) | TypeScript conventions, naming, testing, CSS |
+| [Code of Conduct](CODE_OF_CONDUCT.md) | Community standards |
+| [Security Policy](SECURITY.md) | How to report vulnerabilities privately |
+| [Product Requirements](docs/PRD.md) | Product vision, scope, architecture constraints |
+
+### Quick Start
 
 ```bash
 cd src
-npm install
+npm ci
+npm run lint && npm run test:coverage && npm run build
+npm run dev   # frontend on :5173, backend on :8787
 ```
 
-2. Run checks:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full setup walkthrough.
 
-```bash
-npm run typecheck
-npm run test
-npm run test:coverage
+---
+
+## For Self-Hosters
+
+The official public instance at `app.extensionchecker.org` runs on
+Cloudflare's free tier. If that instance is rate-limited, slow, or you need
+to run ExtensionChecker privately, you can fork this repo and deploy your
+own instance.
+
+| Resource | Description |
+|----------|-------------|
+| [Self-Hosting Guide](docs/SELF_HOSTING.md) | End-to-end walkthrough: fork, configure, deploy |
+| [Deployment Reference](docs/DEPLOYMENT.md) | Domains, environment variables, service bindings |
+| [License](LICENSE) | MIT — what you can and cannot do |
+
+---
+
+## Architecture
+
+```
+src/
+├── frontend/   Vite + React, deployed as a Cloudflare Worker (static assets)
+├── backend/    Hono API on Cloudflare Workers (ingestion, orchestration)
+├── engine/     Manifest-first analysis engine (shared library, not a service)
+└── shared/     Zod schemas, TypeScript types, report contracts
 ```
 
-3. Local package dev servers:
+The frontend proxies `/api/*` to the backend via a Cloudflare service binding
+in production, or Vite's dev proxy locally. The engine runs in-process — it is
+imported by the backend, not called over the network.
 
-```bash
-npm run dev
-```
+---
 
-or target a specific package:
+## License
 
-```bash
-npm run dev -w @extensionchecker/frontend
-npm run dev -w @extensionchecker/backend
-```
-
-## Current Ingestion Scope
-
-Version `0.1.0` implements manifest-first analysis for:
-
-- direct package URLs (`.zip`, `.xpi`, `.crx`)
-- extension IDs (Chrome Web Store IDs and Firefox add-on IDs/slugs)
-- uploaded package files (`.zip`, `.xpi`, `.crx`)
-
-Listing-page URL resolution is planned next.
-
-## Security Notes
-
-- URL and ID retrieval only allow `https://` targets.
-- Localhost, local domains, loopback, and private IP literals are rejected.
-- Package size is capped to reduce abuse and memory risk.
-- Archive parsing is performed in memory without filesystem extraction.
-- API requests require an `Origin` header by default, and only same-origin or configured origins are accepted.
-- Non-browser/server callers can opt in via `API_ALLOW_REQUESTS_WITHOUT_ORIGIN=true` (recommended only for trusted private networks).
-- Optional API token enforcement is supported with `API_ACCESS_TOKEN` (header: `x-extensionchecker-token`).
-- Backend rate limits are enabled by default with configurable per-minute IP, per-day IP, and global per-day quotas.
-
-## Cloudflare Deployment
-
-- The repo now supports a Worker-native deployment path where the frontend Worker serves the static app and proxies `/api/*` and `/health` to the backend Worker through a service binding. This keeps browser traffic same-origin and avoids shipping a shared API secret to the client.
-- A Cloudflare Pages frontend plus a separate API Worker is still a valid deployment shape. If you choose that route, configure `VITE_API_BASE_URL` and set `API_ALLOWED_ORIGINS` to the exact frontend origins you expect.
-- Local secret files are intentionally gitignored: use `.env` / `.env.example` for Vite frontend configuration and `.dev.vars` / `.dev.vars.example` for Wrangler local secrets and Worker-only variables.
-- Deployment details, required secrets, and staging/production expectations are documented in `docs/cloudflare-deployment.md`.
+[MIT](LICENSE) — free to use, modify, and self-host. See
+[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) for what that means in practice.
