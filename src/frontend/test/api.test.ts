@@ -63,7 +63,7 @@ describe('frontend api client', () => {
       headers: { 'content-type': 'text/html' }
     }));
 
-    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(/non-JSON response body/);
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(/server error 502/);
   });
 
   it('throws contract errors for malformed report payloads', async () => {

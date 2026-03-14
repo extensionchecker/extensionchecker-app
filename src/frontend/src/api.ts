@@ -26,7 +26,10 @@ async function parseReportResponse(response: Response): Promise<AnalysisReport> 
       body = JSON.parse(rawBody) as unknown;
     } catch {
       if (!response.ok) {
-        throw new Error(`Backend returned ${response.status} with a non-JSON response body.`);
+        const hint = response.status >= 500
+          ? ' The extension package may be too large or complex. Try the Upload tab with the file directly.'
+          : '';
+        throw new Error(`Analysis failed (server error ${response.status}).${hint}`);
       }
 
       throw new Error('Backend returned invalid JSON.');

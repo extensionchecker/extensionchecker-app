@@ -168,6 +168,14 @@ export function detectPackageKind(url: URL, contentTypeHeader?: string | null): 
   return 'zip';
 }
 
+function isManifestOrLocale(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return lower === 'manifest.json'
+    || lower.endsWith('/manifest.json')
+    || lower.startsWith('_locales/')
+    || lower.includes('/_locales/');
+}
+
 export function extractManifestFromPackage(bytes: ArrayBuffer | Uint8Array, packageKind: PackageKind): unknown {
   const inputBytes = toU8(bytes);
   const zipBytes = packageKind === 'crx' ? extractCrxZipPayload(inputBytes) : inputBytes;
@@ -176,7 +184,7 @@ export function extractManifestFromPackage(bytes: ArrayBuffer | Uint8Array, pack
   let manifestPath: string;
   let manifestRaw: string;
   try {
-    unzipped = unzipSync(zipBytes);
+    unzipped = unzipSync(zipBytes, { filter: (file) => isManifestOrLocale(file.name) });
     const manifestEntry = findManifestEntry(unzipped);
     manifestPath = manifestEntry.path;
     manifestRaw = strFromU8(manifestEntry.bytes);
