@@ -3,12 +3,15 @@ import type { AnalysisProgressEvent, AnalysisReport, RiskSignal, Severity, Store
 import { analyzeExtensionById, analyzeExtensionByUpload, analyzeExtensionByUrl } from './api';
 import { buildPermissionDetails } from './permission-explainer';
 import { resolveExtensionDisplayName } from './report-display';
+import { MarkdownPage } from './MarkdownPage';
+import termsMarkdown from '@docs/TERMS.md?raw';
+import privacyMarkdown from '@docs/PRIVACY.md?raw';
 
 type ThemePreference = 'system' | 'light' | 'dark';
 type ResultTab = 'overview' | 'findings' | 'metadata' | 'phases';
 type PhaseStatus = 'complete' | 'not-available';
 type Tone = 'info' | 'good' | 'caution' | 'danger';
-type AppRoute = 'scan' | 'results';
+type AppRoute = 'scan' | 'results' | 'terms' | 'privacy';
 type IntakeTab = 'paste' | 'upload';
 type SmartSubmissionKind = 'empty' | 'url' | 'id' | 'invalid-url';
 type SubmitTarget = 'text' | 'upload' | null;
@@ -27,12 +30,40 @@ interface SmartSubmissionState {
 const THEME_ORDER: ThemePreference[] = ['system', 'light', 'dark'];
 const CHROME_EXTENSION_ID_REGEX = /^[a-p]{32}$/;
 const SAFARI_APP_STORE_ID_REGEX = /^id\d{6,}$/i;
+const GITHUB_REPO_URL = 'https://github.com/extensionchecker/extensionchecker-app';
+
 const SEVERITY_ORDER: Record<Severity, number> = {
   critical: 0,
   high: 1,
   medium: 2,
   low: 3
 };
+
+function useAppVersion(): string | null {
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/version.txt')
+      .then((res) => {
+        if (!res.ok || !res.headers.get('content-type')?.includes('text/plain')) {
+          return null;
+        }
+
+        return res.text();
+      })
+      .then((text) => {
+        if (text) {
+          const firstLine = text.split('\n')[0];
+          if (firstLine?.trim() && /^\d{2}\.\d{3,4}\.\d{1,4}$/.test(firstLine.trim())) {
+            setVersion(firstLine.trim());
+          }
+        }
+      })
+      .catch(() => { /* version.txt not available — that's fine */ });
+  }, []);
+
+  return version;
+}
 
 function toneForSeverity(severity: Severity): Tone {
   if (severity === 'critical' || severity === 'high') {
@@ -355,8 +386,27 @@ function phaseStatusLabel(status: PhaseStatus): string {
   return status === 'complete' ? 'Complete' : 'Not Available';
 }
 
+const ROUTE_PATHS: Record<string, AppRoute> = {
+  '/results': 'results',
+  '/terms': 'terms',
+  '/privacy': 'privacy'
+};
+
 function routeFromPath(pathname: string): AppRoute {
-  return pathname.startsWith('/results') ? 'results' : 'scan';
+  for (const [prefix, route] of Object.entries(ROUTE_PATHS)) {
+    if (pathname.startsWith(prefix)) {
+      return route;
+    }
+  }
+
+  return 'scan';
+}
+
+function pathForRoute(route: AppRoute): string {
+  if (route === 'results') return '/results';
+  if (route === 'terms') return '/terms';
+  if (route === 'privacy') return '/privacy';
+  return '/';
 }
 
 function detectedBrowserFromUrl(url: URL): DetectedBrowser {
@@ -491,7 +541,7 @@ function detectSmartSubmission(value: string): SmartSubmissionState {
       canSubmit: false,
       browser: null,
       detectionLabel: null,
-      detectionIcon: null,
+      detectionIconSrc: null,
       helperMessage: null
     };
   }
@@ -573,7 +623,8 @@ function useThemePreference(): [ThemePreference, (nextTheme: ThemePreference) =>
   return [theme, applyTheme];
 }
 
-export function App(): JSX.Element {
+export function App() {
+  const appVersion = useAppVersion();
   const [theme, setTheme] = useThemePreference();
   const [intakeTab, setIntakeTab] = useState<IntakeTab>('paste');
   const [textInput, setTextInput] = useState('');
@@ -640,7 +691,14 @@ export function App(): JSX.Element {
     return buildPermissionDetails(report);
   }, [report]);
   const listingUrl = useMemo(() => (report ? sourceListingUrl(report) : null), [report]);
-  const storeBadgeIconSrc = useMemo(() => (report ? browserDetectionIconSrc(sourceStoreBrowser(report)) : null), [report]);
+  const storeBadgeIconSrc = useMemo(() => {
+    if (!report) {
+      return null;
+    }
+
+    const browser = sourceStoreBrowser(report);
+    return browser ? browserDetectionIconSrc(browser) : null;
+  }, [report]);
 
   useEffect(() => {
     const onPopState = (): void => {
@@ -652,7 +710,7 @@ export function App(): JSX.Element {
   }, []);
 
   const navigateTo = useCallback((nextRoute: AppRoute, options?: { query?: URLSearchParams; replace?: boolean }) => {
-    const basePath = nextRoute === 'results' ? '/results' : '/';
+    const basePath = pathForRoute(nextRoute);
     const query = options?.query?.toString();
     const nextPath = query ? `${basePath}?${query}` : basePath;
     const currentPath = `${globalThis.location?.pathname ?? '/'}${globalThis.location?.search ?? ''}`;
@@ -784,10 +842,10 @@ export function App(): JSX.Element {
     <main className="page">
       <section className="card">
         <header className="header">
-          <div className="brand">
+          <a href="/" className="brand" onClick={(e) => { e.preventDefault(); navigateTo('scan'); }}>
             <img src="/brand-icon.svg" alt="ExtensionChecker logo" className="brand-icon" />
             <h1>ExtensionChecker</h1>
-          </div>
+          </a>
           <button
             type="button"
             className="theme-toggle"
@@ -799,7 +857,11 @@ export function App(): JSX.Element {
           </button>
         </header>
 
-        {route === 'scan' ? (
+        {route === 'terms' ? (
+          <MarkdownPage markdown={termsMarkdown} onBack={() => navigateTo('scan')} />
+        ) : route === 'privacy' ? (
+          <MarkdownPage markdown={privacyMarkdown} onBack={() => navigateTo('scan')} />
+        ) : route === 'scan' ? (
           <section id="analysis-intake" className="intake">
             <div className="intake-head">
               <div className="intake-copy">
@@ -1408,6 +1470,24 @@ export function App(): JSX.Element {
           )
         ) : null}
       </section>
+
+      <footer className="app-footer">
+        <div className="footer-row">
+          <span>&copy; {new Date().getFullYear()} ExtensionChecker</span>
+          <span className="footer-sep" aria-hidden="true">&middot;</span>
+          <a href="/terms" onClick={(e) => { e.preventDefault(); navigateTo('terms'); }}>Terms</a>
+          <span className="footer-sep" aria-hidden="true">&middot;</span>
+          <a href="/privacy" onClick={(e) => { e.preventDefault(); navigateTo('privacy'); }}>Privacy</a>
+          <span className="footer-sep" aria-hidden="true">&middot;</span>
+          <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
+          {appVersion ? (
+            <>
+              <span className="footer-sep" aria-hidden="true">&middot;</span>
+              <span className="footer-version">v{appVersion}</span>
+            </>
+          ) : null}
+        </div>
+      </footer>
     </main>
   );
 }

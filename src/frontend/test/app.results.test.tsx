@@ -11,8 +11,17 @@ vi.mock('../src/pdf-report', () => ({
 
 import { App } from '../src/App';
 
+const originalFetch = globalThis.fetch;
+
 beforeEach(() => {
   globalThis.history.replaceState(null, '', '/');
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    if (typeof input === 'string' && input.endsWith('/version.txt')) {
+      return Promise.resolve(new Response('', { status: 404 }));
+    }
+
+    return originalFetch(input, init);
+  });
 });
 
 afterEach(() => {
@@ -88,12 +97,18 @@ describe('App results flows', () => {
   });
 
   it('navigates overview/findings/phases and triggers PDF export', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify(buildDetailedReport()), {
-      status: 200,
-      headers: {
-        'content-type': 'application/json'
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
       }
-    }));
+
+      return Promise.resolve(new Response(JSON.stringify(buildDetailedReport()), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json'
+        }
+      }));
+    });
 
     render(<App />);
 
@@ -129,41 +144,47 @@ describe('App results flows', () => {
   });
 
   it('shows empty findings and permissions states for sparse reports', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
-      reportVersion: '1.0.0',
-      analyzedAt: '2026-03-11T00:00:00.000Z',
-      source: {
-        type: 'file',
-        filename: 'manual-upload.zip',
-        mimeType: 'application/zip'
-      },
-      metadata: {
-        name: 'Sparse Report Extension',
-        version: '1.2.3',
-        manifestVersion: 3
-      },
-      permissions: {
-        requestedPermissions: [],
-        optionalPermissions: [],
-        hostPermissions: []
-      },
-      riskSignals: [],
-      score: {
-        value: 5,
-        severity: 'low',
-        rationale: 'test rationale'
-      },
-      summary: 'No significant findings.',
-      limits: {
-        codeExecutionAnalysisPerformed: false,
-        notes: ['Manifest only.']
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
       }
-    }), {
-      status: 200,
-      headers: {
-        'content-type': 'application/json'
-      }
-    }));
+
+      return Promise.resolve(new Response(JSON.stringify({
+        reportVersion: '1.0.0',
+        analyzedAt: '2026-03-11T00:00:00.000Z',
+        source: {
+          type: 'file',
+          filename: 'manual-upload.zip',
+          mimeType: 'application/zip'
+        },
+        metadata: {
+          name: 'Sparse Report Extension',
+          version: '1.2.3',
+          manifestVersion: 3
+        },
+        permissions: {
+          requestedPermissions: [],
+          optionalPermissions: [],
+          hostPermissions: []
+        },
+        riskSignals: [],
+        score: {
+          value: 5,
+          severity: 'low',
+          rationale: 'test rationale'
+        },
+        summary: 'No significant findings.',
+        limits: {
+          codeExecutionAnalysisPerformed: false,
+          notes: ['Manifest only.']
+        }
+      }), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json'
+        }
+      }));
+    });
 
     render(<App />);
 

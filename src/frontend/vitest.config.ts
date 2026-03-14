@@ -3,7 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
-      '@extensionchecker/shared': new URL('../shared/src/index.ts', import.meta.url).pathname
+      '@extensionchecker/shared': new URL('../shared/src/index.ts', import.meta.url).pathname,
+      '@docs': new URL('../../docs', import.meta.url).pathname
     }
   },
   test: {
@@ -14,7 +15,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       include: ['src/**/*.ts', 'src/**/*.tsx'],
-      exclude: ['src/main.tsx', 'worker.ts', 'src/pdf-report.ts'],
+      exclude: ['src/main.tsx', 'worker.ts', 'src/pdf-report.ts', 'src/vite-env.d.ts'],
       thresholds: {
         lines: 85,
         functions: 85,

@@ -26,6 +26,7 @@ service = "extensionchecker-backend-staging"
 
 [env.production]
 name = "extensionchecker-frontend-production"
+routes = [{ pattern = "app.extensionchecker.org", custom_domain = true }]
 
 [[env.production.services]]
 binding = "BACKEND"

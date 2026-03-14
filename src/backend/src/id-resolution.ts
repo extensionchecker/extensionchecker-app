@@ -127,5 +127,11 @@ export function resolveExtensionIdCandidates(rawInput: string): ResolvedExtensio
 }
 
 export function resolveExtensionIdToPackage(rawInput: string): ResolvedExtensionId {
-  return resolveExtensionIdCandidates(rawInput)[0];
+  const candidates = resolveExtensionIdCandidates(rawInput);
+  const first = candidates[0];
+  if (!first) {
+    throw new Error(`No resolvable extension ID candidates for input: ${rawInput}`);
+  }
+
+  return first;
 }

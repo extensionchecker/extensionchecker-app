@@ -123,6 +123,9 @@ body {
   flex: 1;
   min-width: 0;
   max-inline-size: 100%;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 .brand-icon {
@@ -1448,4 +1451,205 @@ a.extension-identity-store:hover {
   .metadata-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Footer ── */
+
+.app-footer {
+  width: 100%;
+  max-width: 780px;
+  margin: 1.5rem auto 0;
+  padding: 1rem 0 0.5rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+}
+
+.footer-sep {
+  user-select: none;
+  opacity: 0.5;
+}
+
+.app-footer a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.app-footer a:hover,
+.app-footer a:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.footer-version {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* ── Markdown Pages (Terms, Privacy) ── */
+
+.markdown-page {
+  padding: 0.5rem 0;
+}
+
+.markdown-nav {
+  margin-bottom: 1rem;
+}
+
+.markdown-body {
+  color: var(--text);
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+
+.markdown-body h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  border-bottom: 1px solid var(--panel-border);
+  padding-bottom: 0.5rem;
+}
+
+.markdown-body h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.markdown-body h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.markdown-body p {
+  margin: 0.6rem 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.markdown-body li {
+  margin: 0.25rem 0;
+}
+
+.markdown-body a {
+  color: var(--focus);
+  text-decoration: none;
+}
+
+.markdown-body a:hover,
+.markdown-body a:focus-visible {
+  text-decoration: underline;
+}
+
+.markdown-body em {
+  color: var(--muted);
+}
+
+.markdown-body code {
+  font-size: 0.85em;
+  background: var(--bg-2);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--panel-border);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+}
+
+.markdown-body th {
+  background: var(--bg-1);
+  font-weight: 600;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--panel-border);
+  margin: 1.5rem 0;
+}
+
+/* GitHub-flavored admonitions */
+.markdown-alert {
+  border-left: 4px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  background: var(--bg-1);
+}
+
+.markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.markdown-alert-title svg {
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.markdown-alert-note {
+  border-left-color: #2563eb;
+}
+
+.markdown-alert-note .markdown-alert-title {
+  color: #2563eb;
+}
+
+.markdown-alert-tip {
+  border-left-color: #22c55e;
+}
+
+.markdown-alert-tip .markdown-alert-title {
+  color: #22c55e;
+}
+
+.markdown-alert-important {
+  border-left-color: #a855f7;
+}
+
+.markdown-alert-important .markdown-alert-title {
+  color: #a855f7;
+}
+
+.markdown-alert-warning {
+  border-left-color: #f59e0b;
+}
+
+.markdown-alert-warning .markdown-alert-title {
+  color: #f59e0b;
+}
+
+.markdown-alert-caution {
+  border-left-color: #ef4444;
+}
+
+.markdown-alert-caution .markdown-alert-title {
+  color: #ef4444;
 }

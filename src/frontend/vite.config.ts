@@ -14,7 +14,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@extensionchecker/shared': new URL('../shared/src/index.ts', import.meta.url).pathname
+      '@extensionchecker/shared': new URL('../shared/src/index.ts', import.meta.url).pathname,
+      '@docs': new URL('../../docs', import.meta.url).pathname
     }
   },
   plugins: [react()]

@@ -2,8 +2,18 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../src/App';
 
+const originalFetch = globalThis.fetch;
+
 beforeEach(() => {
   globalThis.history.replaceState(null, '', '/');
+  // Stub version.txt so useAppVersion doesn't interfere with test fetch mocks.
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    if (typeof input === 'string' && input.endsWith('/version.txt')) {
+      return Promise.resolve(new Response('', { status: 404 }));
+    }
+
+    return originalFetch(input, init);
+  });
 });
 
 afterEach(() => {
@@ -105,15 +115,21 @@ describe('App', () => {
   });
 
   it('submits URL and renders report summary', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify(buildReport({
-      type: 'url',
-      value: 'https://example.com/extension.zip'
-    })), {
-      status: 200,
-      headers: {
-        'content-type': 'application/json'
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
       }
-    }));
+
+      return Promise.resolve(new Response(JSON.stringify(buildReport({
+        type: 'url',
+        value: 'https://example.com/extension.zip'
+      })), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json'
+        }
+      }));
+    });
 
     render(<App />);
 
@@ -128,15 +144,21 @@ describe('App', () => {
   });
 
   it('submits extension ID request when the generic field detects an ID', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify(buildReport({
-      type: 'id',
-      value: 'abcdefghijklmnopabcdefghijklmnop'
-    })), {
-      status: 200,
-      headers: {
-        'content-type': 'application/json'
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
       }
-    }));
+
+      return Promise.resolve(new Response(JSON.stringify(buildReport({
+        type: 'id',
+        value: 'abcdefghijklmnopabcdefghijklmnop'
+      })), {
+        status: 200,
+        headers: {
+          'content-type': 'application/json'
+        }
+      }));
+    });
 
     render(<App />);
 
@@ -147,17 +169,21 @@ describe('App', () => {
       expect(screen.getByText('UI Test Extension')).toBeInTheDocument();
     });
 
-    const fetchInit = fetchSpy.mock.calls[0]?.[1] as RequestInit;
-    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe('/api/analyze');
+    const fetchInit = fetchSpy.mock.calls.find((c) => String(c[0]) === '/api/analyze')?.[1] as RequestInit;
+    expect(fetchSpy.mock.calls.some((c) => String(c[0]) === '/api/analyze')).toBe(true);
     expect(fetchInit.method).toBe('POST');
     expect(typeof fetchInit.body).toBe('string');
     expect(fetchInit.body).toContain('"type":"id"');
   });
 
   it('shows a readable error for non-json backend failures', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
-      status: 502
-    }));
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
+      }
+
+      return Promise.resolve(new Response('', { status: 502 }));
+    });
 
     render(<App />);
 
@@ -171,14 +197,20 @@ describe('App', () => {
   });
 
   it('bubbles backend validation errors for unsupported URLs', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
-      error: 'Unsupported URL. Only browser extension store URLs are supported, or upload the extension.'
-    }), {
-      status: 400,
-      headers: {
-        'content-type': 'application/json'
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
       }
-    }));
+
+      return Promise.resolve(new Response(JSON.stringify({
+        error: 'Unsupported URL. Only browser extension store URLs are supported, or upload the extension.'
+      }), {
+        status: 400,
+        headers: {
+          'content-type': 'application/json'
+        }
+      }));
+    });
 
     render(<App />);
 

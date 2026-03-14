@@ -1,0 +1,5 @@
+Contact: https://github.com/extensionchecker/extensionchecker-app/security/advisories/new
+Contact: mailto:security@extensionchecker.org
+Preferred-Languages: en
+Canonical: https://app.extensionchecker.org/.well-known/security.txt
+Policy: https://github.com/extensionchecker/extensionchecker-app/blob/main/SECURITY.md

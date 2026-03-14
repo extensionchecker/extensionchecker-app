@@ -28,11 +28,12 @@ name = "extensionchecker-backend-staging"
 
 [env.staging.vars]
 API_ALLOWED_ORIGINS = "https://staging.extensionchecker.org"
-API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
 
 [env.production]
 name = "extensionchecker-backend-production"
+routes = [{ pattern = "api.extensionchecker.org", custom_domain = true }]
 
 [env.production.vars]
-API_ALLOWED_ORIGINS = "https://extensionchecker.org"
+API_ALLOWED_ORIGINS = "https://app.extensionchecker.org"
 API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
+
