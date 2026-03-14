@@ -8,6 +8,12 @@ describe('validatePublicFetchUrl', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('accepts Opera Add-ons URLs as recognized extension store URLs', () => {
+    const result = validatePublicFetchUrl('https://addons.opera.com/en/extensions/details/ublock/');
+
+    expect(result.ok).toBe(true);
+  });
+
   it('rejects non-https URLs', () => {
     const result = validatePublicFetchUrl('http://example.com/file.zip');
 

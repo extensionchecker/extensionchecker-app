@@ -84,7 +84,7 @@ describe('App results flows', () => {
 
     expect(screen.getByText('No Report Loaded')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Go to Scanner' }));
-    expect(screen.getByLabelText('Input mode')).toBeInTheDocument();
+    expect(screen.getByLabelText('Extension URL or ID')).toBeInTheDocument();
   });
 
   it('navigates overview/findings/phases and triggers PDF export', async () => {
@@ -97,7 +97,7 @@ describe('App results flows', () => {
 
     render(<App />);
 
-    const urlInput = screen.getByLabelText('Extension package URL');
+    const urlInput = screen.getByLabelText('Extension URL or ID');
     fireEvent.change(urlInput, {
       target: {
         value: 'https://chromewebstore.google.com/detail/sample-extension/abcdefghijklmnopabcdefghijklmnop'
@@ -108,6 +108,7 @@ describe('App results flows', () => {
     await waitFor(() => {
       expect(screen.getByText('Detailed Coverage Extension')).toBeInTheDocument();
       expect(screen.getByText('Declared Permissions and Access')).toBeInTheDocument();
+      expect(document.querySelector('.extension-identity-store-image')).toHaveAttribute('src', '/browser-icons/icon_chrome.png');
     });
 
     fireEvent.click(screen.getByRole('tab', { name: /Findings/i }));
@@ -124,7 +125,7 @@ describe('App results flows', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: /Back to Scanner/i }));
-    expect(screen.getByLabelText('Input mode')).toBeInTheDocument();
+    expect(screen.getByLabelText('Extension URL or ID')).toBeInTheDocument();
   });
 
   it('shows empty findings and permissions states for sparse reports', async () => {
@@ -166,7 +167,7 @@ describe('App results flows', () => {
 
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('Extension package URL'), {
+    fireEvent.change(screen.getByLabelText('Extension URL or ID'), {
       target: {
         value: 'https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/addon-latest.xpi'
       }

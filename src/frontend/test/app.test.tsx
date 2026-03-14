@@ -41,25 +41,68 @@ function buildReport(source: { type: 'url'; value: string } | { type: 'id'; valu
 }
 
 describe('App', () => {
-  it('shows URL source guidance and Safari listing hint in URL mode', async () => {
-    render(<App />);
+  it('shows the paste tab by default and detects a Firefox URL', async () => {
+    const { container } = render(<App />);
 
-    expect(screen.getByText(/Supported URL sources:/)).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Paste' })).toHaveAttribute('aria-selected', 'true');
 
-    const input = screen.getByLabelText('Extension package URL');
-    fireEvent.change(input, { target: { value: 'https://apps.apple.com/us/app/1password-password-manager/id1511601750' } });
+    const input = screen.getByLabelText('Extension URL or ID');
+    fireEvent.change(input, { target: { value: 'https://addons.mozilla.org/firefox/addon/ublock-origin/' } });
 
-    expect(screen.getByText(/Safari listing detected/)).toBeInTheDocument();
+    expect(screen.getByText('Firefox extension detected')).toBeInTheDocument();
+    expect(container.querySelector('.browser-detection-image')).toHaveAttribute('src', '/browser-icons/icon_firefox.png');
   });
 
-  it('shows Safari ID guidance and disables submit in ID mode', async () => {
+  it('treats a bare 32-character Chromium ID as ambiguous instead of Chrome-only', async () => {
+    const { container } = render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Extension URL or ID'), { target: { value: 'nffknjpglkklphnibdiadeeeeailfnog' } });
+
+    expect(screen.getByText('Chrome or Edge extension ID detected')).toBeInTheDocument();
+    expect(container.querySelector('.browser-detection-image')).toBeNull();
+  });
+
+  it('shows Opera guidance and disables submit for Opera Add-ons URLs', async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('Input mode'), { target: { value: 'id' } });
-    fireEvent.change(screen.getByLabelText('Extension ID'), { target: { value: 'id1569813296' } });
+    fireEvent.change(screen.getByLabelText('Extension URL or ID'), { target: { value: 'https://addons.opera.com/en/extensions/details/ublock/' } });
 
-    expect(screen.getByText(/Safari App Store IDs are not supported in Extension ID mode/)).toBeInTheDocument();
+    expect(screen.getByText('Opera extension detected')).toBeInTheDocument();
+    expect(screen.getByText('Opera Add-ons URLs are not supported yet. Upload the extension instead.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+  });
+
+  it('shows Safari guidance and disables submit for Safari URLs', async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Extension URL or ID'), { target: { value: 'https://apps.apple.com/us/app/1password-password-manager/id1511601750' } });
+
+    expect(screen.getByText('Safari listing detected')).toBeInTheDocument();
+    expect(screen.getByText('Safari App Store URLs are not supported. Upload the extension instead.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+  });
+
+  it('keeps invalid URLs short and disables submit until they are complete', async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Extension URL or ID'), { target: { value: 'https://' } });
+
+    expect(screen.getByText('Enter a full URL or extension ID.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze' })).toBeDisabled();
+  });
+
+  it('switches to the upload tab and enables upload analysis when a file is chosen', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Upload' }));
+    expect(screen.getByRole('tab', { name: 'Upload' })).toHaveAttribute('aria-selected', 'true');
+
+    const fileInput = screen.getByLabelText('Extension package file') as HTMLInputElement;
+    const file = new File(['dummy'], 'extension.zip', { type: 'application/zip' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    expect(screen.getByText(/Ready to analyze/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analyze Upload' })).toBeEnabled();
   });
 
   it('submits URL and renders report summary', async () => {
@@ -75,7 +118,7 @@ describe('App', () => {
 
     render(<App />);
 
-    const input = screen.getByLabelText('Extension package URL');
+  const input = screen.getByLabelText('Extension URL or ID');
     fireEvent.change(input, { target: { value: 'https://example.com/extension.zip' } });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
@@ -85,7 +128,7 @@ describe('App', () => {
     });
   });
 
-  it('submits extension ID mode request', async () => {
+  it('submits extension ID request when the generic field detects an ID', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify(buildReport({
       type: 'id',
       value: 'abcdefghijklmnopabcdefghijklmnop'
@@ -98,8 +141,7 @@ describe('App', () => {
 
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('Input mode'), { target: { value: 'id' } });
-    fireEvent.change(screen.getByLabelText('Extension ID'), { target: { value: 'abcdefghijklmnopabcdefghijklmnop' } });
+  fireEvent.change(screen.getByLabelText('Extension URL or ID'), { target: { value: 'abcdefghijklmnopabcdefghijklmnop' } });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
     await waitFor(() => {
@@ -120,12 +162,32 @@ describe('App', () => {
 
     render(<App />);
 
-    const input = screen.getByLabelText('Extension package URL');
+  const input = screen.getByLabelText('Extension URL or ID');
     fireEvent.change(input, { target: { value: 'https://example.com/extension.zip' } });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
     await waitFor(() => {
       expect(screen.getByText('Backend request failed with status 502.')).toBeInTheDocument();
+    });
+  });
+
+  it('bubbles backend validation errors for unsupported URLs', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      error: 'Unsupported URL. Only browser extension store URLs are supported, or upload the extension.'
+    }), {
+      status: 400,
+      headers: {
+        'content-type': 'application/json'
+      }
+    }));
+
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText('Extension URL or ID'), { target: { value: 'https://example.com/extension.zip' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Unsupported URL. Only browser extension store URLs are supported, or upload the extension.')).toBeInTheDocument();
     });
   });
 });

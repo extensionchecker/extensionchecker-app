@@ -11,6 +11,7 @@ const ALLOWED_SUBMISSION_HOSTS = new Set([
   'chrome.google.com',
   'clients2.google.com',
   'addons.mozilla.org',
+  'addons.opera.com',
   'apps.apple.com',
   'itunes.apple.com',
   'microsoftedge.microsoft.com',
@@ -24,6 +25,10 @@ export function isAllowedSubmissionHost(hostname: string): boolean {
 export function isSafariAppStoreHost(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
   return normalized === 'apps.apple.com' || normalized === 'itunes.apple.com';
+}
+
+export function isOperaAddonsHost(hostname: string): boolean {
+  return hostname.toLowerCase() === 'addons.opera.com';
 }
 
 function ipv4PartsToInt(parts: readonly number[]): number {
@@ -62,11 +67,11 @@ export function validatePublicFetchUrl(rawUrl: string): { ok: true; url: URL } |
   try {
     parsedUrl = new URL(rawUrl);
   } catch {
-    return { ok: false, reason: 'URL must be a valid absolute URL.' };
+    return { ok: false, reason: 'Enter a valid URL.' };
   }
 
   if (parsedUrl.protocol !== 'https:') {
-    return { ok: false, reason: 'Only HTTPS URLs are allowed for package retrieval.' };
+    return { ok: false, reason: 'Only HTTPS URLs are supported.' };
   }
 
   const hostname = parsedUrl.hostname.toLowerCase();
@@ -81,7 +86,7 @@ export function validatePublicFetchUrl(rawUrl: string): { ok: true; url: URL } |
   if (!isAllowedSubmissionHost(hostname)) {
     return {
       ok: false,
-      reason: 'Unsupported URL domain. Use a Chrome Web Store, Edge Add-ons, or Firefox Add-ons URL, or upload a package file.'
+      reason: 'Unsupported URL. Only browser extension store URLs are supported, or upload the extension.'
     };
   }
 

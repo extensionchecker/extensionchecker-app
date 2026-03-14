@@ -5,11 +5,25 @@ import { buildPermissionDetails } from './permission-explainer';
 import { resolveExtensionDisplayName } from './report-display';
 
 type ThemePreference = 'system' | 'light' | 'dark';
-type SubmissionMode = 'url' | 'id' | 'file';
 type ResultTab = 'overview' | 'findings' | 'metadata' | 'phases';
 type PhaseStatus = 'complete' | 'not-available';
 type Tone = 'info' | 'good' | 'caution' | 'danger';
 type AppRoute = 'scan' | 'results';
+type IntakeTab = 'paste' | 'upload';
+type SmartSubmissionKind = 'empty' | 'url' | 'id' | 'invalid-url';
+type SubmitTarget = 'text' | 'upload' | null;
+type DetectedBrowser = 'chrome' | 'firefox' | 'edge' | 'opera' | 'safari' | 'chromium' | 'generic';
+
+interface SmartSubmissionState {
+  kind: SmartSubmissionKind;
+  normalizedValue: string;
+  canSubmit: boolean;
+  browser: DetectedBrowser | null;
+  detectionLabel: string | null;
+  detectionIconSrc: string | null;
+  helperMessage: string | null;
+}
+
 const THEME_ORDER: ThemePreference[] = ['system', 'light', 'dark'];
 const CHROME_EXTENSION_ID_REGEX = /^[a-p]{32}$/;
 const SAFARI_APP_STORE_ID_REGEX = /^id\d{6,}$/i;
@@ -92,31 +106,39 @@ function verdictExplanation(report: AnalysisReport): string {
   return 'No high-impact manifest combinations were detected in this static manifest-first analysis.';
 }
 
-function sourceStoreLabel(report: AnalysisReport): string {
+function sourceStoreBrowser(report: AnalysisReport): DetectedBrowser | null {
   if (report.source.type === 'file') {
-    return 'Uploaded package';
+    return null;
   }
 
   const value = report.source.value;
 
   if (report.source.type === 'id') {
-    if (value.startsWith('chrome:') || /^[a-p]{32}$/.test(value)) {
-      return 'Chrome Web Store';
+    if (value.startsWith('chrome:')) {
+      return 'chrome';
+    }
+
+    if (/^[a-p]{32}$/.test(value)) {
+      return 'chromium';
     }
 
     if (value.startsWith('firefox:')) {
-      return 'Firefox Add-ons';
+      return 'firefox';
     }
 
     if (value.startsWith('edge:')) {
-      return 'Edge Add-ons';
+      return 'edge';
+    }
+
+    if (value.startsWith('opera:')) {
+      return 'opera';
     }
 
     if (value.startsWith('safari:')) {
-      return 'Safari Extensions';
+      return 'safari';
     }
 
-    return 'Extension ID';
+    return 'generic';
   }
 
   try {
@@ -124,25 +146,63 @@ function sourceStoreLabel(report: AnalysisReport): string {
     const host = parsed.hostname.toLowerCase();
 
     if (host.includes('chromewebstore.google.com') || host.includes('chrome.google.com') || host.includes('clients2.google.com')) {
-      return 'Chrome Web Store';
+      return 'chrome';
     }
 
     if (host.includes('addons.mozilla.org')) {
-      return 'Firefox Add-ons';
+      return 'firefox';
     }
 
     if (host.includes('microsoftedge.microsoft.com') || host.includes('edge.microsoft.com')) {
-      return 'Edge Add-ons';
+      return 'edge';
+    }
+
+    if (host.includes('addons.opera.com')) {
+      return 'opera';
     }
 
     if (host.includes('safari') || host.includes('apple.com')) {
-      return 'Safari Extensions';
+      return 'safari';
     }
   } catch {
-    return 'Unknown store';
+    return 'generic';
   }
 
-  return 'Unknown store';
+  return 'generic';
+}
+
+function sourceStoreLabel(report: AnalysisReport): string {
+  if (report.source.type === 'file') {
+    return 'Uploaded package';
+  }
+
+  const browser = sourceStoreBrowser(report);
+
+  if (browser === 'chrome') {
+    return 'Chrome Web Store';
+  }
+
+  if (browser === 'chromium') {
+    return 'Chrome or Edge Extension';
+  }
+
+  if (browser === 'firefox') {
+    return 'Firefox Add-ons';
+  }
+
+  if (browser === 'edge') {
+    return 'Edge Add-ons';
+  }
+
+  if (browser === 'opera') {
+    return 'Opera Add-ons';
+  }
+
+  if (browser === 'safari') {
+    return 'Safari Extensions';
+  }
+
+  return report.source.type === 'id' ? 'Extension ID' : 'Unknown store';
 }
 
 function sourceListingUrl(report: AnalysisReport): string | null {
@@ -294,6 +354,182 @@ function routeFromPath(pathname: string): AppRoute {
   return pathname.startsWith('/results') ? 'results' : 'scan';
 }
 
+function detectedBrowserFromUrl(url: URL): DetectedBrowser {
+  const host = url.hostname.toLowerCase();
+
+  if (host === 'chromewebstore.google.com' || host === 'chrome.google.com' || host === 'clients2.google.com') {
+    return 'chrome';
+  }
+
+  if (host === 'addons.mozilla.org') {
+    return 'firefox';
+  }
+
+  if (host === 'microsoftedge.microsoft.com' || host === 'edge.microsoft.com') {
+    return 'edge';
+  }
+
+  if (host === 'addons.opera.com') {
+    return 'opera';
+  }
+
+  if (host === 'apps.apple.com' || host === 'itunes.apple.com') {
+    return 'safari';
+  }
+
+  return 'generic';
+}
+
+function detectedBrowserFromId(value: string): DetectedBrowser {
+  const trimmed = value.trim();
+
+  if (/^chrome:/i.test(trimmed) || CHROME_EXTENSION_ID_REGEX.test(trimmed)) {
+    return /^chrome:/i.test(trimmed) ? 'chrome' : 'chromium';
+  }
+
+  if (/^firefox:/i.test(trimmed)) {
+    return 'firefox';
+  }
+
+  if (/^edge:/i.test(trimmed)) {
+    return 'edge';
+  }
+
+  if (/^safari:/i.test(trimmed) || SAFARI_APP_STORE_ID_REGEX.test(trimmed)) {
+    return 'safari';
+  }
+
+  return 'generic';
+}
+
+function browserDetectionLabel(browser: DetectedBrowser, kind: Extract<SmartSubmissionKind, 'url' | 'id'>): string {
+  if (browser === 'chrome') {
+    return 'Chrome extension detected';
+  }
+
+  if (browser === 'chromium') {
+    return 'Chrome or Edge extension ID detected';
+  }
+
+  if (browser === 'firefox') {
+    return 'Firefox extension detected';
+  }
+
+  if (browser === 'edge') {
+    return 'Edge extension detected';
+  }
+
+  if (browser === 'opera') {
+    return 'Opera extension detected';
+  }
+
+  if (browser === 'safari') {
+    return kind === 'url' ? 'Safari listing detected' : 'Safari extension detected';
+  }
+
+  return kind === 'url' ? 'Extension URL detected' : 'Extension ID detected';
+}
+
+function browserDetectionIconSrc(browser: DetectedBrowser): string | null {
+  if (browser === 'chrome') {
+    return '/browser-icons/icon_chrome.png';
+  }
+
+  if (browser === 'chromium') {
+    return null;
+  }
+
+  if (browser === 'firefox') {
+    return '/browser-icons/icon_firefox.png';
+  }
+
+  if (browser === 'edge') {
+    return '/browser-icons/icon_edge.png';
+  }
+
+  if (browser === 'opera') {
+    return '/browser-icons/icon_opera.png';
+  }
+
+  if (browser === 'safari') {
+    return '/browser-icons/icon_safari.png';
+  }
+
+  return null;
+}
+
+function unsupportedBrowserMessage(browser: DetectedBrowser, kind: Extract<SmartSubmissionKind, 'url' | 'id'>): string | null {
+  if (browser === 'safari') {
+    return kind === 'url'
+      ? 'Safari App Store URLs are not supported. Upload the extension instead.'
+      : 'Safari extensions are not supported by ID. Upload the extension instead.';
+  }
+
+  if (browser === 'opera' && kind === 'url') {
+    return 'Opera Add-ons URLs are not supported yet. Upload the extension instead.';
+  }
+
+  return null;
+}
+
+function detectSmartSubmission(value: string): SmartSubmissionState {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return {
+      kind: 'empty',
+      normalizedValue: '',
+      canSubmit: false,
+      browser: null,
+      detectionLabel: null,
+      detectionIcon: null,
+      helperMessage: null
+    };
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed);
+      const normalizedValue = parsed.toString();
+      const isHttps = parsed.protocol === 'https:';
+      const browser = detectedBrowserFromUrl(parsed);
+      const unsupportedMessage = unsupportedBrowserMessage(browser, 'url');
+
+      return {
+        kind: 'url',
+        normalizedValue,
+        canSubmit: isHttps && unsupportedMessage === null,
+        browser,
+        detectionLabel: browserDetectionLabel(browser, 'url'),
+        detectionIconSrc: browserDetectionIconSrc(browser),
+        helperMessage: !isHttps ? 'Use an https URL.' : unsupportedMessage
+      };
+    } catch {
+      return {
+        kind: 'invalid-url',
+        normalizedValue: trimmed,
+        canSubmit: false,
+        browser: null,
+        detectionLabel: null,
+        detectionIconSrc: null,
+        helperMessage: 'Enter a full URL or extension ID.'
+      };
+    }
+  }
+  const browser = detectedBrowserFromId(trimmed);
+  const unsupportedMessage = unsupportedBrowserMessage(browser, 'id');
+
+  return {
+    kind: 'id',
+    normalizedValue: trimmed,
+    canSubmit: unsupportedMessage === null,
+    browser,
+    detectionLabel: browserDetectionLabel(browser, 'id'),
+    detectionIconSrc: browserDetectionIconSrc(browser),
+    helperMessage: unsupportedMessage
+  };
+}
+
 function useThemePreference(): [ThemePreference, (nextTheme: ThemePreference) => void] {
   const [theme, setTheme] = useState<ThemePreference>(() => {
     const persisted = globalThis.localStorage?.getItem('theme');
@@ -330,9 +566,8 @@ function useThemePreference(): [ThemePreference, (nextTheme: ThemePreference) =>
 
 export function App(): JSX.Element {
   const [theme, setTheme] = useThemePreference();
-  const [mode, setMode] = useState<SubmissionMode>('url');
-  const [url, setUrl] = useState('');
-  const [extensionId, setExtensionId] = useState('');
+  const [intakeTab, setIntakeTab] = useState<IntakeTab>('paste');
+  const [textInput, setTextInput] = useState('');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [report, setReport] = useState<AnalysisReport | null>(null);
   const [route, setRoute] = useState<AppRoute>(() => routeFromPath(globalThis.location?.pathname ?? '/'));
@@ -341,42 +576,12 @@ export function App(): JSX.Element {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [progress, setProgress] = useState<AnalysisProgressEvent | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const safariIdHint = useMemo(() => (mode === 'id' ? isLikelySafariExtensionId(extensionId) : false), [mode, extensionId]);
-  const chromeIdFormatHint = useMemo(() => {
-    if (mode !== 'id') {
-      return false;
-    }
-
-    const trimmed = extensionId.trim();
-    if (!trimmed || safariIdHint) {
-      return false;
-    }
-
-    const prefixed = /^(chrome|firefox|safari):/i.test(trimmed);
-    const maybeChromeCandidate = /^[a-z]+$/i.test(trimmed) && trimmed.length >= 16;
-    if (prefixed || !maybeChromeCandidate) {
-      return false;
-    }
-
-    return !looksLikeValidChromeId(trimmed);
-  }, [mode, extensionId, safariIdHint]);
-
-  const canSubmit = useMemo(() => {
-    if (mode === 'url') {
-      try {
-        const parsed = new URL(url);
-        return parsed.protocol === 'https:';
-      } catch {
-        return false;
-      }
-    }
-
-    if (mode === 'id') {
-      return extensionId.trim().length > 0 && !isLikelySafariExtensionId(extensionId);
-    }
-
-    return uploadFile !== null;
-  }, [extensionId, mode, uploadFile, url]);
+  const [submitTarget, setSubmitTarget] = useState<SubmitTarget>(null);
+  const smartSubmission = useMemo(() => detectSmartSubmission(textInput), [textInput]);
+  const canSubmitText = smartSubmission.kind !== 'empty' && smartSubmission.canSubmit;
+  const canSubmitUpload = uploadFile !== null;
+  const textSubmitting = isSubmitting && submitTarget === 'text';
+  const uploadSubmitting = isSubmitting && submitTarget === 'upload';
 
   const sortedSignals = useMemo(() => {
     if (!report) {
@@ -426,7 +631,7 @@ export function App(): JSX.Element {
     return buildPermissionDetails(report);
   }, [report]);
   const listingUrl = useMemo(() => (report ? sourceListingUrl(report) : null), [report]);
-  const safariUrlHint = useMemo(() => (mode === 'url' ? isSafariStoreInputUrl(url) : false), [mode, url]);
+  const storeBadgeIconSrc = useMemo(() => (report ? browserDetectionIconSrc(sourceStoreBrowser(report)) : null), [report]);
 
   useEffect(() => {
     const onPopState = (): void => {
@@ -454,32 +659,33 @@ export function App(): JSX.Element {
     setRoute(nextRoute);
   }, []);
 
-  const resultsQuery = useCallback((): URLSearchParams => {
+  const resultsQuery = useCallback((nextReport: AnalysisReport): URLSearchParams => {
     const params = new URLSearchParams();
-    if (mode === 'url' && url.trim()) {
-      params.set('extensionUrl', url.trim());
+    if (nextReport.source.type === 'url') {
+      params.set('extensionUrl', nextReport.source.value);
       return params;
     }
 
-    if (mode === 'id' && extensionId.trim()) {
-      params.set('extensionId', extensionId.trim());
+    if (nextReport.source.type === 'id') {
+      params.set('extensionId', nextReport.source.value);
       return params;
     }
 
-    if (mode === 'file' && uploadFile?.name) {
-      params.set('filename', uploadFile.name);
+    if (nextReport.source.type === 'file') {
+      params.set('filename', nextReport.source.filename);
     }
 
     return params;
-  }, [extensionId, mode, uploadFile?.name, url]);
+  }, []);
 
-  const submit = useCallback(async (event: FormEvent): Promise<void> => {
+  const submitText = useCallback(async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    if (!canSubmit) {
+    if (!canSubmitText) {
       return;
     }
 
     setIsSubmitting(true);
+    setSubmitTarget('text');
     setError(null);
     setProgress(null);
 
@@ -488,23 +694,53 @@ export function App(): JSX.Element {
     };
 
     try {
-      const nextReport = mode === 'url'
-        ? await analyzeExtensionByUrl(url, onProgress)
-        : mode === 'id'
-          ? await analyzeExtensionById(extensionId, onProgress)
-          : await analyzeExtensionByUpload(uploadFile as File, onProgress);
+      const nextReport = smartSubmission.kind === 'url'
+        ? await analyzeExtensionByUrl(smartSubmission.normalizedValue, onProgress)
+        : await analyzeExtensionById(smartSubmission.normalizedValue, onProgress);
 
       setReport(nextReport);
       setActiveTab('overview');
-      navigateTo('results', { query: resultsQuery() });
+      navigateTo('results', { query: resultsQuery(nextReport) });
     } catch (submitError) {
       setReport(null);
       setError(submitError instanceof Error ? submitError.message : 'Unexpected error');
     } finally {
       setIsSubmitting(false);
+      setSubmitTarget(null);
       setProgress(null);
     }
-  }, [canSubmit, extensionId, mode, navigateTo, resultsQuery, uploadFile, url]);
+  }, [canSubmitText, navigateTo, resultsQuery, smartSubmission]);
+
+  const submitUpload = useCallback(async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    if (!uploadFile) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitTarget('upload');
+    setError(null);
+    setProgress(null);
+
+    const onProgress = (evt: AnalysisProgressEvent): void => {
+      setProgress(evt);
+    };
+
+    try {
+      const nextReport = await analyzeExtensionByUpload(uploadFile, onProgress);
+
+      setReport(nextReport);
+      setActiveTab('overview');
+      navigateTo('results', { query: resultsQuery(nextReport) });
+    } catch (submitError) {
+      setReport(null);
+      setError(submitError instanceof Error ? submitError.message : 'Unexpected error');
+    } finally {
+      setIsSubmitting(false);
+      setSubmitTarget(null);
+      setProgress(null);
+    }
+  }, [navigateTo, resultsQuery, uploadFile]);
 
   const currentThemeIndex = Math.max(0, THEME_ORDER.indexOf(theme));
   const nextTheme: ThemePreference = THEME_ORDER[(currentThemeIndex + 1) % THEME_ORDER.length] ?? 'system';
@@ -532,6 +768,9 @@ export function App(): JSX.Element {
     });
   };
 
+  const pasteTabSelected = intakeTab === 'paste';
+  const uploadTabSelected = intakeTab === 'upload';
+
   return (
     <main className="page">
       <section className="card">
@@ -556,112 +795,156 @@ export function App(): JSX.Element {
             <div className="intake-head">
               <div className="intake-copy">
                 <p className="intake-label">Input</p>
-                <p className="description">Analyze browser extensions by package URL, store listing URL, extension ID, or uploaded package file.</p>
+                <p className="description">Paste a store URL, package URL, or extension ID. Upload a package when you already have the file.</p>
               </div>
             </div>
 
-            <form onSubmit={submit} className="form">
-              <label htmlFor="mode">Input mode</label>
-              <select
-                id="mode"
-                value={mode}
-                onChange={(event) => {
-                  setMode(event.target.value as SubmissionMode);
-                  setError(null);
-                }}
+            <div className="intake-tabs" role="tablist" aria-label="Input options">
+              <button
+                type="button"
+                role="tab"
+                id="intake-tab-paste"
+                aria-selected={pasteTabSelected}
+                aria-controls="intake-panel-paste"
+                className={`intake-tab-button${pasteTabSelected ? ' is-active' : ''}`}
+                onClick={() => setIntakeTab('paste')}
               >
-                <option value="url">Package URL</option>
-                <option value="id">Extension ID</option>
-                <option value="file">Package Upload</option>
-              </select>
+                Paste
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="intake-tab-upload"
+                aria-selected={uploadTabSelected}
+                aria-controls="intake-panel-upload"
+                className={`intake-tab-button${uploadTabSelected ? ' is-active' : ''}`}
+                onClick={() => setIntakeTab('upload')}
+              >
+                Upload
+              </button>
+            </div>
 
-              {mode === 'url' ? (
-                <>
-                  <label htmlFor="url">Extension package URL</label>
-                  <input
-                    id="url"
-                    type="url"
-                    placeholder="https://chromewebstore.google.com/detail/... or https://addons.mozilla.org/firefox/addon/... or https://microsoftedge.microsoft.com/addons/detail/..."
-                    value={url}
-                    onChange={(event) => setUrl(event.target.value)}
-                    required
-                  />
-                  <p className="field-hint">
-                    Supported URL sources: <code>chromewebstore.google.com</code>, <code>chrome.google.com</code>, <code>clients2.google.com</code>, <code>addons.mozilla.org</code>, and <code>microsoftedge.microsoft.com</code>.
-                    Safari App Store pages (<code>apps.apple.com</code>) cannot be analyzed directly from URL because Apple does not expose extension package downloads from listings.
-                  </p>
-                  {safariUrlHint ? (
-                    <p className="field-hint warning">
-                      Safari listing detected. Use <strong>Package Upload</strong> only if you already have a separate extension archive (for example from developer build artifacts).
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
+            <div className="intake-layout">
+              {pasteTabSelected ? (
+                <form onSubmit={submitText} className="form intake-panel intake-panel-primary" role="tabpanel" id="intake-panel-paste" aria-labelledby="intake-tab-paste">
+                  <div className="panel-copy-block">
+                    <p className="panel-label">Paste a URL or ID</p>
+                    <p className="panel-description">Chrome, Firefox, and Edge links or IDs work here.</p>
+                  </div>
 
-              {mode === 'id' ? (
-                <>
-                  <label htmlFor="extension-id">Extension ID</label>
+                  <label htmlFor="analysis-source">Extension URL or ID</label>
                   <input
-                    id="extension-id"
+                    id="analysis-source"
                     type="text"
-                    placeholder="chrome:abcdefghijklmnopabcdefghijklmnop"
-                    value={extensionId}
-                    onChange={(event) => setExtensionId(event.target.value)}
-                    required
+                    placeholder="Paste a store URL, package URL, or extension ID"
+                    value={textInput}
+                    onChange={(event) => {
+                      setTextInput(event.target.value);
+                      setError(null);
+                      if (intakeTab !== 'paste') {
+                        setIntakeTab('paste');
+                      }
+                    }}
                   />
-                  <p className="field-hint">
-                    Chrome IDs must be 32 characters using letters <code>a</code>-<code>p</code>. Firefox supports add-on slugs or <code>firefox:&lt;id&gt;</code>. Edge supports <code>edge:&lt;id&gt;</code> (32-character ID).
-                  </p>
-                  {chromeIdFormatHint ? (
-                    <p className="field-hint warning">
-                      This looks like a Chrome-style ID, but the format is invalid. Use a 32-character ID with letters a-p.
+
+                  {smartSubmission.detectionLabel ? (
+                    <p className={`browser-detection browser-${smartSubmission.browser ?? 'generic'}`}>
+                      {smartSubmission.detectionIconSrc ? (
+                        <img className="browser-detection-image" src={smartSubmission.detectionIconSrc} alt="" aria-hidden="true" />
+                      ) : null}
+                      {smartSubmission.detectionLabel}
                     </p>
                   ) : null}
-                  {safariIdHint ? (
-                    <p className="field-hint warning">
-                      Safari App Store IDs are not supported in Extension ID mode. Use <strong>Package Upload</strong> only with an extension archive you already obtained separately.
-                    </p>
+
+                  {smartSubmission.helperMessage ? (
+                    <p className="field-hint warning">{smartSubmission.helperMessage}</p>
                   ) : null}
-                </>
+
+                  <div className="form-actions">
+                    <button type="submit" disabled={!canSubmitText || isSubmitting} aria-busy={textSubmitting}>
+                      <span className="button-content">
+                        {textSubmitting ? (
+                          <span className="button-loading">
+                            <span className="button-spinner" aria-hidden="true" />
+                            {progress ? progress.message : 'Analyzing\u2026'}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined button-icon" aria-hidden="true">search</span>
+                            Analyze
+                          </>
+                        )}
+                      </span>
+                    </button>
+                  </div>
+
+                  {textSubmitting && progress ? (
+                    <div className="analysis-progress" role="progressbar" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100} aria-label={progress.message}>
+                      <div className="analysis-progress-track">
+                        <div className="analysis-progress-fill" style={{ width: `${progress.percent}%` }} />
+                      </div>
+                      <span className="analysis-progress-label">{progress.message}</span>
+                    </div>
+                  ) : null}
+                </form>
               ) : null}
 
-              {mode === 'file' ? (
-                <>
+              {uploadTabSelected ? (
+                <form onSubmit={submitUpload} className="form intake-panel intake-panel-secondary" role="tabpanel" id="intake-panel-upload" aria-labelledby="intake-tab-upload">
+                  <div className="panel-copy-block">
+                    <p className="panel-label">Upload package</p>
+                    <p className="panel-description">Use this when you already have the extension file.</p>
+                  </div>
+
                   <label htmlFor="package-file">Extension package file</label>
                   <input
                     id="package-file"
                     type="file"
                     accept=".zip,.xpi,.crx"
-                    onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)}
-                    required
+                    onChange={(event) => {
+                      setUploadFile(event.target.files?.[0] ?? null);
+                      setError(null);
+                      if (intakeTab !== 'upload') {
+                        setIntakeTab('upload');
+                      }
+                    }}
                   />
-                </>
-              ) : null}
 
-              <button type="submit" disabled={!canSubmit || isSubmitting} aria-busy={isSubmitting}>
-                <span className="button-content">
-                  {isSubmitting ? (
-                    <span className="button-loading">
-                      <span className="button-spinner" aria-hidden="true" />
-                      {progress ? progress.message : 'Analyzing\u2026'}
-                    </span>
+                  {uploadFile ? (
+                    <p className="field-hint">Ready to analyze <strong>{uploadFile.name}</strong> ({formatBytes(uploadFile.size)}).</p>
                   ) : (
-                    <>
-                      <span className="material-symbols-outlined button-icon" aria-hidden="true">search</span>
-                      Analyze
-                    </>
+                    <p className="field-hint">Accepted formats: <code>.crx</code>, <code>.xpi</code>, <code>.zip</code>.</p>
                   )}
-                </span>
-              </button>
-              {isSubmitting && progress ? (
-                <div className="analysis-progress" role="progressbar" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100} aria-label={progress.message}>
-                  <div className="analysis-progress-track">
-                    <div className="analysis-progress-fill" style={{ width: `${progress.percent}%` }} />
+
+                  <div className="form-actions">
+                    <button type="submit" className="secondary-button" disabled={!canSubmitUpload || isSubmitting} aria-busy={uploadSubmitting}>
+                      <span className="button-content">
+                        {uploadSubmitting ? (
+                          <span className="button-loading">
+                            <span className="button-spinner" aria-hidden="true" />
+                            {progress ? progress.message : 'Uploading\u2026'}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined button-icon" aria-hidden="true">upload</span>
+                            Analyze Upload
+                          </>
+                        )}
+                      </span>
+                    </button>
                   </div>
-                  <span className="analysis-progress-label">{progress.message}</span>
-                </div>
+
+                  {uploadSubmitting && progress ? (
+                    <div className="analysis-progress" role="progressbar" aria-valuenow={progress.percent} aria-valuemin={0} aria-valuemax={100} aria-label={progress.message}>
+                      <div className="analysis-progress-track">
+                        <div className="analysis-progress-fill" style={{ width: `${progress.percent}%` }} />
+                      </div>
+                      <span className="analysis-progress-label">{progress.message}</span>
+                    </div>
+                  ) : null}
+                </form>
               ) : null}
-            </form>
+            </div>
             {error ? <p className="error">{error}</p> : null}
           </section>
         ) : null}
@@ -709,12 +992,20 @@ export function App(): JSX.Element {
                       rel="noopener noreferrer"
                       title="Open extension listing"
                     >
-                      <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                      {storeBadgeIconSrc ? (
+                        <img className="extension-identity-store-image" src={storeBadgeIconSrc} alt="" aria-hidden="true" />
+                      ) : (
+                        <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                      )}
                       {sourceStoreLabel(report)}
                     </a>
                   ) : (
                     <p className="extension-identity-store">
-                      <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                      {storeBadgeIconSrc ? (
+                        <img className="extension-identity-store-image" src={storeBadgeIconSrc} alt="" aria-hidden="true" />
+                      ) : (
+                        <span className="material-symbols-outlined" aria-hidden="true">storefront</span>
+                      )}
                       {sourceStoreLabel(report)}
                     </p>
                   )}

@@ -5,9 +5,9 @@ import { analyzeManifest } from '@extensionchecker/engine';
 import { AnalysisReportSchema, type AnalysisProgressStep, type StoreMetadata } from '@extensionchecker/shared';
 import { ALLOWED_PACKAGE_EXTENSIONS, MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES } from './constants';
 import { type PackageKind, detectPackageKind, extractManifestFromPackage } from './archive';
-import { resolveExtensionIdToPackage } from './id-resolution';
+import { resolveExtensionIdCandidates, type ResolvedExtensionId } from './id-resolution';
 import { resolveListingUrlToId } from './listing-url';
-import { isSafariAppStoreHost, validatePublicFetchUrl } from './url-safety';
+import { isOperaAddonsHost, isSafariAppStoreHost, validatePublicFetchUrl } from './url-safety';
 import {
   InMemoryRateLimiter,
   buildRateLimitErrorMessage,
@@ -147,6 +147,13 @@ type DownloadedPackage = {
   contentType: string | null;
 };
 
+type ResolvedIdDownload = {
+  downloaded: DownloadedPackage;
+  packageUrl: URL;
+  packageKindHint: PackageKind;
+  source: AnalyzeSource;
+};
+
 async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeoutMs: number, maxBytes: number): Promise<DownloadedPackage> {
   const signal = AbortSignal.timeout(timeoutMs);
 
@@ -182,6 +189,41 @@ async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeoutMs: num
   }
 
   return { bytes, contentType: response.headers.get('content-type') };
+}
+
+async function resolveAndDownloadExtensionId(
+  rawId: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+  maxBytes: number
+): Promise<ResolvedIdDownload> {
+  const candidates = resolveExtensionIdCandidates(rawId);
+  let lastErrorMessage = 'Failed to download extension package.';
+
+  for (const candidate of candidates) {
+    const target = validatePublicFetchUrl(candidate.downloadUrl.toString());
+    if (!target.ok) {
+      lastErrorMessage = target.reason;
+      continue;
+    }
+
+    try {
+      const downloaded = await downloadPackage(target.url, fetchImpl, timeoutMs, maxBytes);
+      return {
+        downloaded,
+        packageUrl: target.url,
+        packageKindHint: candidate.packageKind,
+        source: {
+          type: 'id',
+          value: `${candidate.ecosystem}:${candidate.canonicalId}`
+        }
+      };
+    } catch (error) {
+      lastErrorMessage = error instanceof Error ? error.message : 'Failed to download extension package.';
+    }
+  }
+
+  throw new Error(lastErrorMessage);
 }
 
 function extractStoreMetadata(manifest: z.infer<typeof ManifestSchema>, packageSizeBytes: number, storeUrl: string | null): StoreMetadata {
@@ -419,6 +461,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
     let packageUrl: URL;
     let packageKindHint: PackageKind | null = null;
+    let downloadedFromId: DownloadedPackage | null = null;
     let source = parsedRequest.data.source;
 
     if (source.type === 'url') {
@@ -430,18 +473,40 @@ export function createApp(options: CreateAppOptions = {}): Hono {
       packageUrl = target.url;
       if (isSafariAppStoreHost(target.url.hostname)) {
         return context.json({
-          error: 'Safari App Store listing URLs cannot be analyzed directly because Apple does not expose a downloadable extension package from listing pages. Upload an extension archive you obtained separately (for example from developer build artifacts).'
+          error: 'Safari listing URLs cannot be analyzed directly. Upload the package instead.'
+        }, 400);
+      }
+
+      if (isOperaAddonsHost(target.url.hostname)) {
+        return context.json({
+          error: 'Opera Add-ons URLs are not supported yet. Upload the extension instead.'
         }, 400);
       }
 
       const resolvedIdFromListing = resolveListingUrlToId(target.url);
       if (resolvedIdFromListing) {
-        let resolved;
+        let resolved: ResolvedExtensionId | null = null;
         try {
-          resolved = resolveExtensionIdToPackage(resolvedIdFromListing);
+          const candidates = resolveExtensionIdCandidates(resolvedIdFromListing);
+          const listingHost = target.url.hostname.toLowerCase();
+          resolved = candidates.find((candidate) => {
+            if (listingHost === 'microsoftedge.microsoft.com') {
+              return candidate.ecosystem === 'edge';
+            }
+
+            if (listingHost === 'chromewebstore.google.com' || listingHost === 'chrome.google.com') {
+              return candidate.ecosystem === 'chrome';
+            }
+
+            return candidate.ecosystem === 'firefox';
+          }) ?? candidates[0] ?? null;
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unsupported extension listing URL.';
           return context.json({ error: message }, 400);
+        }
+
+        if (!resolved) {
+          return context.json({ error: 'Unsupported extension listing URL.' }, 400);
         }
 
         const resolvedTarget = validatePublicFetchUrl(resolved.downloadUrl.toString());
@@ -451,40 +516,45 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
         packageUrl = resolvedTarget.url;
         packageKindHint = resolved.packageKind;
+        source = {
+          type: 'id',
+          value: `${resolved.ecosystem}:${resolved.canonicalId}`
+        };
       } else if (!isLikelyDirectPackageUrl(target.url)) {
         return context.json({
-          error: 'URL must be a supported extension listing or direct package download (.crx, .xpi, .zip). For unsupported sources, upload an extension archive obtained separately.'
+          error: 'Unsupported URL. Only browser extension store URLs are supported, or upload the extension.'
         }, 400);
       }
     } else {
-      let resolved;
       try {
-        resolved = resolveExtensionIdToPackage(source.value);
+        const resolved = await resolveAndDownloadExtensionId(
+          source.value,
+          fetchImpl,
+          securityConfig.upstreamTimeoutMs,
+          MAX_PACKAGE_SIZE_BYTES
+        );
+
+        downloadedFromId = resolved.downloaded;
+        packageUrl = resolved.packageUrl;
+        packageKindHint = resolved.packageKindHint;
+        source = resolved.source;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unsupported extension identifier.';
         return context.json({ error: message }, 400);
       }
-
-      const target = validatePublicFetchUrl(resolved.downloadUrl.toString());
-      if (!target.ok) {
-        return context.json({ error: target.reason }, 400);
-      }
-
-      packageUrl = target.url;
-      packageKindHint = resolved.packageKind;
-      source = {
-        type: 'id',
-        value: resolved.canonicalId
-      };
     }
 
     if (!streaming) {
       let downloaded: DownloadedPackage;
-      try {
-        downloaded = await downloadPackage(packageUrl, fetchImpl, securityConfig.upstreamTimeoutMs, MAX_PACKAGE_SIZE_BYTES);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to download extension package.';
-        return context.json({ error: message }, 502);
+      if (downloadedFromId) {
+        downloaded = downloadedFromId;
+      } else {
+        try {
+          downloaded = await downloadPackage(packageUrl, fetchImpl, securityConfig.upstreamTimeoutMs, MAX_PACKAGE_SIZE_BYTES);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to download extension package.';
+          return context.json({ error: message }, 502);
+        }
       }
 
       if (downloaded.bytes.byteLength > MAX_PACKAGE_SIZE_BYTES) {
@@ -513,6 +583,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const capturedPackageUrl = packageUrl;
     const capturedPackageKindHint = packageKindHint;
     const capturedSource = source;
+    const capturedDownloadedFromId = downloadedFromId;
 
     return streamSSE(context, async (stream) => {
       const emitProgress = async (step: AnalysisProgressStep, message: string, percent: number): Promise<void> => {
@@ -525,12 +596,16 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         await emitProgress('downloading', 'Downloading extension package…', 20);
 
         let downloaded: DownloadedPackage;
-        try {
-          downloaded = await downloadPackage(capturedPackageUrl, fetchImpl, securityConfig.upstreamTimeoutMs, MAX_PACKAGE_SIZE_BYTES);
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to download extension package.';
-          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: message }) });
-          return;
+        if (capturedDownloadedFromId) {
+          downloaded = capturedDownloadedFromId;
+        } else {
+          try {
+            downloaded = await downloadPackage(capturedPackageUrl, fetchImpl, securityConfig.upstreamTimeoutMs, MAX_PACKAGE_SIZE_BYTES);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to download extension package.';
+            await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: message }) });
+            return;
+          }
         }
 
         if (downloaded.bytes.byteLength > MAX_PACKAGE_SIZE_BYTES) {

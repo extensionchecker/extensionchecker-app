@@ -213,6 +213,90 @@ h1 {
   max-inline-size: 100%;
 }
 
+.intake-layout {
+  display: block;
+  max-inline-size: 42rem;
+}
+
+.intake-tabs {
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-end;
+  gap: 0.15rem;
+  margin: 0 0 0.95rem;
+  padding-bottom: 0;
+  border-bottom: 1px solid var(--panel-border);
+  overflow-x: auto;
+}
+
+.intake-tab-button {
+  inline-size: auto;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0.72rem 1rem 0.68rem;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-weight: 700;
+  position: relative;
+  top: 1px;
+}
+
+.intake-tab-button.is-active {
+  background: color-mix(in srgb, var(--focus) 14%, transparent);
+  border-bottom-color: var(--focus);
+  color: var(--text);
+}
+
+.intake-tab-button:hover:enabled {
+  transform: none;
+  filter: none;
+  box-shadow: none;
+  color: var(--text);
+  background: color-mix(in srgb, var(--focus) 10%, transparent);
+}
+
+.intake-panel {
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 90%, transparent);
+  background: color-mix(in srgb, var(--input-bg) 52%, transparent);
+}
+
+.intake-panel-primary {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--input-bg) 80%, transparent), color-mix(in srgb, var(--panel) 72%, transparent));
+}
+
+.intake-panel-secondary {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 82%, transparent), color-mix(in srgb, var(--input-bg) 56%, transparent));
+}
+
+.panel-copy-block {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.panel-label {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.panel-description {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--text);
+}
+
 label {
   font-weight: 600;
   font-size: 0.95rem;
@@ -237,6 +321,49 @@ label {
 
 .field-hint.warning {
   color: color-mix(in srgb, var(--error) 72%, var(--text) 28%);
+}
+
+.browser-detection {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  justify-self: flex-start;
+  margin: 0.05rem 0 0;
+  padding: 0.38rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--input-border);
+  background: color-mix(in srgb, var(--input-bg) 88%, transparent);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.browser-detection-image {
+  inline-size: 1rem;
+  block-size: 1rem;
+  border-radius: 999px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.browser-chrome {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+.browser-firefox {
+  border-color: rgba(249, 115, 22, 0.42);
+}
+
+.browser-edge {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.browser-opera {
+  border-color: rgba(239, 68, 68, 0.42);
+}
+
+.browser-safari {
+  border-color: rgba(14, 165, 233, 0.42);
 }
 
 input,
@@ -280,7 +407,7 @@ select:focus {
 }
 
 button {
-  inline-size: 100%;
+  inline-size: auto;
   max-inline-size: 100%;
   margin-top: 0.4rem;
   padding: 0.78rem 1rem;
@@ -355,6 +482,28 @@ button {
 button:hover:enabled {
   transform: translateY(-1px);
   filter: brightness(1.05);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.secondary-button {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--input-border);
+  box-shadow: none;
+}
+
+.secondary-button .button-spinner {
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+  border-top-color: var(--text);
+}
+
+.secondary-button:hover:enabled {
+  background: color-mix(in srgb, var(--input-bg) 72%, transparent);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.1);
 }
 
 button:disabled {
@@ -535,6 +684,14 @@ button:disabled {
 .extension-identity-version .material-symbols-outlined,
 .extension-identity-store .material-symbols-outlined {
   font-size: 1rem;
+}
+
+.extension-identity-store-image {
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+  border-radius: 999px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 a.extension-identity-store:hover {
@@ -1063,6 +1220,12 @@ a.extension-identity-store:hover {
   background: color-mix(in srgb, #f59e0b 15%, transparent);
 }
 
+@media (min-width: 860px) {
+  .intake-layout {
+    max-inline-size: 44rem;
+  }
+}
+
 @media (max-width: 640px) {
   .page {
     padding: 0.6rem;
@@ -1081,6 +1244,23 @@ a.extension-identity-store:hover {
   .intake-head {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .intake-tabs {
+    gap: 0.45rem;
+  }
+
+  .intake-tab-button {
+    padding-inline: 0.85rem;
+  }
+
+  .intake-panel {
+    padding: 0.85rem;
+    border-radius: 14px;
+  }
+
+  .form-actions button {
+    min-inline-size: 9.5rem;
   }
 
   .extension-identity-head {

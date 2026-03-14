@@ -202,6 +202,46 @@ describe('backend app', () => {
     expect(firstCallUrl).toContain('addons.mozilla.org/firefox/downloads/latest/ublock-origin');
   });
 
+  it('falls back from Chrome to Edge for an ambiguous raw Chromium ID', async () => {
+    const crxBytes = buildCrxManifest();
+    const fetchSpy = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('clients2.google.com/service/update2/crx')) {
+        return new Response('not found', { status: 404 });
+      }
+
+      return new Response(crxBytes, {
+        status: 200,
+        headers: {
+          'content-type': 'application/x-chrome-extension'
+        }
+      });
+    });
+
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        source: {
+          type: 'id',
+          value: 'nffknjpglkklphnibdiadeeeeailfnog'
+        }
+      })
+    });
+
+    expect(response.status).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    const body = await response.json() as { source: { type: string; value: string } };
+    expect(body.source.type).toBe('id');
+    expect(body.source.value).toBe('edge:nffknjpglkklphnibdiadeeeeailfnog');
+  });
+
   it('accepts upload endpoint and returns a report', async () => {
     const form = new FormData();
     form.set('file', new File([buildManifestZip()], 'extension.zip', { type: 'application/zip' }));
@@ -317,7 +357,7 @@ describe('backend app', () => {
 
     expect(response.status).toBe(400);
     const body = await response.json() as { error?: string };
-    expect(body.error).toMatch(/Unsupported URL domain/);
+    expect(body.error).toBe('Unsupported URL. Only browser extension store URLs are supported, or upload the extension.');
   });
 
   it('returns Safari URL guidance instead of archive parse failure', async () => {
@@ -340,7 +380,31 @@ describe('backend app', () => {
 
     expect(response.status).toBe(400);
     const body = await response.json() as { error?: string };
-    expect(body.error).toMatch(/cannot be analyzed directly/);
+    expect(body.error).toBe('Safari listing URLs cannot be analyzed directly. Upload the package instead.');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns Opera URL guidance instead of attempting download', async () => {
+    const fetchSpy = vi.fn(async () => new Response('should-not-fetch', { status: 200 }));
+    globalThis.fetch = fetchSpy as typeof fetch;
+
+    const app = createApp();
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        source: {
+          type: 'url',
+          value: 'https://addons.opera.com/en/extensions/details/ublock/'
+        }
+      })
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json() as { error?: string };
+    expect(body.error).toBe('Opera Add-ons URLs are not supported yet. Upload the extension instead.');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
