@@ -96,6 +96,121 @@ describe('App results flows', () => {
     expect(screen.getByLabelText('Extension URL or ID')).toBeInTheDocument();
   });
 
+  it('ignores an extensionId query param that exceeds the maximum allowed length', () => {
+    const oversizedId = 'x'.repeat(2049);
+    globalThis.history.replaceState(null, '', `/results?extensionId=${oversizedId}`);
+    render(<App />);
+
+    // Value exceeds MAX_QUERY_PARAM_VALUE_LENGTH so both the auto-submit guard and the
+    // rescanValue memo reject it — the generic "No Report Loaded" state must be shown
+    expect(screen.getByText('No Report Loaded')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Re-scan Extension' })).not.toBeInTheDocument();
+  });
+
+  it('ignores an extensionUrl query param that exceeds the maximum allowed length', () => {
+    const oversizedUrl = `https://chromewebstore.google.com/detail/${'a'.repeat(2049)}`;
+    globalThis.history.replaceState(null, '', `/results?extensionUrl=${encodeURIComponent(oversizedUrl)}`);
+    render(<App />);
+
+    expect(screen.getByText('No Report Loaded')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Re-scan Extension' })).not.toBeInTheDocument();
+  });
+
+  it('auto-submits analysis when landing on results route with extensionId query param', async () => {
+    globalThis.history.replaceState(null, '', '/results?extensionId=chrome%3Aabcdefghijklmnopabcdefghijklmnop');
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify(buildDetailedReport()), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Detailed Coverage Extension')).toBeInTheDocument();
+    });
+  });
+
+  it('auto-submits analysis when landing on results route with extensionUrl query param', async () => {
+    const storeUrl = 'https://chromewebstore.google.com/detail/sample-extension/abcdefghijklmnopabcdefghijklmnop';
+    globalThis.history.replaceState(null, '', `/results?extensionUrl=${encodeURIComponent(storeUrl)}`);
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify(buildDetailedReport()), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      }));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Detailed Coverage Extension')).toBeInTheDocument();
+    });
+  });
+
+  it('auto-submit pre-fills the text input with the extension identifier', async () => {
+    globalThis.history.replaceState(null, '', '/results?extensionId=chrome%3Aabcdefghijklmnopabcdefghijklmnop');
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
+      }
+
+      return Promise.resolve(new Response('{}', { status: 500, headers: { 'content-type': 'application/json' } }));
+    });
+
+    render(<App />);
+
+    // Auto-submit fires and navigates to scan page; the pre-filled value should appear in the input
+    await waitFor(() => {
+      const input = screen.getByLabelText('Extension URL or ID') as HTMLInputElement;
+      expect(input.value).toBe('chrome:abcdefghijklmnopabcdefghijklmnop');
+    });
+  });
+
+  it('shows Re-scan Extension button when navigating back to results with no report after a failed auto-submit', async () => {
+    globalThis.history.replaceState(null, '', '/results?extensionId=chrome%3Aabcdefghijklmnopabcdefghijklmnop');
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      if (typeof input === 'string' && input.endsWith('/version.txt')) {
+        return Promise.resolve(new Response('', { status: 404 }));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ error: 'Not found' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' }
+      }));
+    });
+
+    render(<App />);
+
+    // Auto-submit fires, fails, leaving the user on the scan page with an error
+    await waitFor(() => {
+      expect(screen.getByLabelText('Extension URL or ID')).toBeInTheDocument();
+    });
+
+    // Simulate user navigating back to /results manually (e.g. browser back button)
+    globalThis.history.replaceState(null, '', '/results?extensionId=chrome%3Aabcdefghijklmnopabcdefghijklmnop');
+    fireEvent.popState(window);
+
+    // Re-scan button should appear since the URL still has the extensionId but no report is in memory
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Re-scan Extension' })).toBeInTheDocument();
+    });
+
+    // Clicking Re-scan navigates to scanner and pre-fills the input
+    fireEvent.click(screen.getByRole('button', { name: 'Re-scan Extension' }));
+    const input = screen.getByLabelText('Extension URL or ID') as HTMLInputElement;
+    expect(input.value).toBe('chrome:abcdefghijklmnopabcdefghijklmnop');
+  });
+
   it('navigates overview/findings/phases and triggers PDF export', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       if (typeof input === 'string' && input.endsWith('/version.txt')) {

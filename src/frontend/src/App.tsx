@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AnalysisProgressEvent, AnalysisReport } from '@extensionchecker/shared';
 import type { AppRoute, SubmitTarget } from './types';
-import { THEME_ORDER } from './constants';
+import { THEME_ORDER, MAX_QUERY_PARAM_VALUE_LENGTH } from './constants';
 import { useAppVersion } from './hooks/useAppVersion';
 import { useThemePreference } from './hooks/useThemePreference';
 import { detectSmartSubmission } from './utils/smart-submission';
@@ -27,6 +27,7 @@ export function App() {
   const [progress, setProgress] = useState<AnalysisProgressEvent | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [submitTarget, setSubmitTarget] = useState<SubmitTarget>(null);
+  const hasAttemptedAutoSubmit = useRef(false);
 
   const smartSubmission = useMemo(() => detectSmartSubmission(textInput), [textInput]);
   const canSubmitText = smartSubmission.kind !== 'empty' && smartSubmission.canSubmit;
@@ -79,6 +80,65 @@ export function App() {
     return params;
   }, []);
 
+  const submitValueAsText = useCallback(async (value: string): Promise<void> => {
+    const submission = detectSmartSubmission(value);
+    if (submission.kind === 'empty' || !submission.canSubmit) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitTarget('text');
+    setError(null);
+    setProgress(null);
+
+    const onProgress = (evt: AnalysisProgressEvent): void => {
+      setProgress(evt);
+    };
+
+    try {
+      const nextReport = submission.kind === 'url'
+        ? await analyzeExtensionByUrl(submission.normalizedValue, onProgress)
+        : await analyzeExtensionById(submission.normalizedValue, onProgress);
+
+      setReport(nextReport);
+      navigateTo('results', { query: resultsQuery(nextReport) });
+    } catch (submitError) {
+      setReport(null);
+      setError(submitError instanceof Error ? submitError.message : 'Unexpected error');
+    } finally {
+      setIsSubmitting(false);
+      setSubmitTarget(null);
+      setProgress(null);
+    }
+  }, [navigateTo, resultsQuery]);
+
+  // Auto-submit when landing directly on /results with an extensionId or extensionUrl query param
+  // and no report is in memory (e.g. user opened a shared link). Navigates to the scan page first
+  // so the progress UI is visible during the analysis.
+  useEffect(() => {
+    if (hasAttemptedAutoSubmit.current) return;
+    if (route !== 'results' || report !== null) return;
+
+    const params = new URLSearchParams(globalThis.location?.search ?? '');
+    const raw = params.get('extensionId') ?? params.get('extensionUrl');
+    // Reject absent or suspiciously long values before touching state or running any validation.
+    if (!raw || raw.length > MAX_QUERY_PARAM_VALUE_LENGTH) return;
+
+    hasAttemptedAutoSubmit.current = true;
+    setTextInput(raw);
+    navigateTo('scan', { replace: true });
+    void submitValueAsText(raw);
+  }, [navigateTo, report, route, submitValueAsText]);
+
+  const rescanValue = useMemo((): string | null => {
+    if (route !== 'results') return null;
+    const params = new URLSearchParams(globalThis.location?.search ?? '');
+    const raw = params.get('extensionId') ?? params.get('extensionUrl');
+    // Same guard as the auto-submit effect: silently ignore oversized values.
+    if (!raw || raw.length > MAX_QUERY_PARAM_VALUE_LENGTH) return null;
+    return raw;
+  }, [route]);
+
   const handleTextChange = useCallback((value: string) => {
     setTextInput(value);
     setError(null);
@@ -95,31 +155,8 @@ export function App() {
       return;
     }
 
-    setIsSubmitting(true);
-    setSubmitTarget('text');
-    setError(null);
-    setProgress(null);
-
-    const onProgress = (evt: AnalysisProgressEvent): void => {
-      setProgress(evt);
-    };
-
-    try {
-      const nextReport = smartSubmission.kind === 'url'
-        ? await analyzeExtensionByUrl(smartSubmission.normalizedValue, onProgress)
-        : await analyzeExtensionById(smartSubmission.normalizedValue, onProgress);
-
-      setReport(nextReport);
-      navigateTo('results', { query: resultsQuery(nextReport) });
-    } catch (submitError) {
-      setReport(null);
-      setError(submitError instanceof Error ? submitError.message : 'Unexpected error');
-    } finally {
-      setIsSubmitting(false);
-      setSubmitTarget(null);
-      setProgress(null);
-    }
-  }, [canSubmitText, navigateTo, resultsQuery, smartSubmission]);
+    await submitValueAsText(smartSubmission.normalizedValue);
+  }, [canSubmitText, smartSubmission.normalizedValue, submitValueAsText]);
 
   const submitUpload = useCallback(async (event: FormEvent): Promise<void> => {
     event.preventDefault();
@@ -167,12 +204,16 @@ export function App() {
     }
   };
 
-  const openScanner = (): void => {
+  const openScanner = useCallback((prefill?: string | null): void => {
+    if (prefill) {
+      setTextInput(prefill);
+    }
+
     navigateTo('scan');
     globalThis.requestAnimationFrame?.(() => {
       globalThis.document?.getElementById('analysis-intake')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
-  };
+  }, [navigateTo]);
 
   const currentThemeIndex = Math.max(0, THEME_ORDER.indexOf(theme));
   const nextTheme = THEME_ORDER[(currentThemeIndex + 1) % THEME_ORDER.length] ?? 'system';
@@ -214,6 +255,7 @@ export function App() {
             isExportingPdf={isExportingPdf}
             onExportPdf={exportPdf}
             onOpenScanner={openScanner}
+            rescanValue={rescanValue}
           />
         ) : null}
       </section>

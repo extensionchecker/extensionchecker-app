@@ -14,10 +14,11 @@ interface ResultsPageProps {
   report: AnalysisReport | null;
   isExportingPdf: boolean;
   onExportPdf: () => void;
-  onOpenScanner: () => void;
+  onOpenScanner: (prefill?: string | null) => void;
+  rescanValue?: string | null;
 }
 
-export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner }: ResultsPageProps) {
+export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner, rescanValue }: ResultsPageProps) {
   const [activeTab, setActiveTab] = useState<ResultTab>('overview');
 
   const sortedSignals = useMemo(() => {
@@ -72,11 +73,24 @@ export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner
   const storeBadgeIconSrc = useMemo(() => (report ? sourceStoreBadgeIconSrc(report) : null), [report]);
 
   if (!report) {
+    if (rescanValue) {
+      return (
+        <section className="results-empty">
+          <h2>No Report in Memory</h2>
+          <p>This link contains a saved extension reference. Click below to re-run the analysis.</p>
+          <p className="results-empty-id"><code>{rescanValue}</code></p>
+          <button type="button" className="results-nav-action" onClick={() => onOpenScanner(rescanValue)}>
+            Re-scan Extension
+          </button>
+        </section>
+      );
+    }
+
     return (
       <section className="results-empty">
         <h2>No Report Loaded</h2>
         <p>This route is ready for saved report snapshots, but no in-memory report is available yet.</p>
-        <button type="button" className="results-nav-action" onClick={onOpenScanner}>Go to Scanner</button>
+        <button type="button" className="results-nav-action" onClick={() => onOpenScanner()}>Go to Scanner</button>
       </section>
     );
   }
@@ -84,7 +98,7 @@ export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner
   return (
     <section className="report" aria-live="polite">
       <div className="results-nav">
-        <button type="button" className="results-nav-link" onClick={onOpenScanner}>
+        <button type="button" className="results-nav-link" onClick={() => onOpenScanner()}>
           <span className="material-symbols-outlined" aria-hidden="true">arrow_back</span>
           Back to Scanner
         </button>
