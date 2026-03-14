@@ -1,6 +1,51 @@
-import { strFromU8, unzipSync } from 'fflate';
+import { strFromU8, unzipSync, type UnzipFileInfo } from 'fflate';
 
 export type PackageKind = 'zip' | 'xpi' | 'crx';
+
+// Safety limits for archive validation.
+const MAX_ZIP_ENTRIES = 5_000;
+// Maximum uncompressed size for any single file we will decompress (manifest.json or locale).
+const MAX_DECOMPRESSED_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
+// Maximum compression ratio before declaring a zip bomb.
+const MAX_COMPRESSION_RATIO = 1_000;
+
+/**
+ * Validates a ZIP central-directory entry against known adversarial archive patterns.
+ * Throws with a descriptive message if any check fails; the caller should surface this
+ * as an archive validation error.
+ */
+function validateZipEntry(file: UnzipFileInfo, entryIndex: number): void {
+  if (entryIndex >= MAX_ZIP_ENTRIES) {
+    throw new Error(`Package contains more than ${MAX_ZIP_ENTRIES.toLocaleString()} entries and was rejected to protect against zip-bomb attacks.`);
+  }
+
+  // Null bytes in filenames indicate a malformed or adversarial archive.
+  if (file.name.includes('\0')) {
+    throw new Error('Package contains a file entry with a null byte in its name and was rejected.');
+  }
+
+  // Path traversal: absolute paths or entries that walk up the directory tree.
+  const normalized = file.name.replace(/\\/g, '/');
+  if (
+    normalized.startsWith('/') ||
+    normalized.split('/').some((segment) => segment === '..')
+  ) {
+    throw new Error('Package contains a path-traversal file entry and was rejected.');
+  }
+
+  // Zip bomb detection: check the declared compression ratio before decompressing.
+  if (file.size > 0 && file.originalSize > 0) {
+    const ratio = file.originalSize / file.size;
+    if (ratio > MAX_COMPRESSION_RATIO) {
+      throw new Error(`Package contains a file with a suspicious compression ratio (${Math.round(ratio)}:1) and was rejected.`);
+    }
+  }
+
+  // Cap the declared uncompressed size for files we will actually decompress.
+  if (file.originalSize > MAX_DECOMPRESSED_FILE_BYTES) {
+    throw new Error(`Package contains a file that exceeds the maximum allowed uncompressed size (${Math.round(file.originalSize / (1024 * 1024))} MB).`);
+  }
+}
 
 function toU8(bytes: ArrayBuffer | Uint8Array): Uint8Array {
   return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -176,6 +221,14 @@ function isManifestOrLocale(filename: string): boolean {
     || lower.includes('/_locales/');
 }
 
+function makeZipFilter() {
+  let count = 0;
+  return function zipFilter(file: UnzipFileInfo): boolean {
+    validateZipEntry(file, count++);
+    return isManifestOrLocale(file.name);
+  };
+}
+
 export function extractManifestFromPackage(bytes: ArrayBuffer | Uint8Array, packageKind: PackageKind): unknown {
   const inputBytes = toU8(bytes);
   const zipBytes = packageKind === 'crx' ? extractCrxZipPayload(inputBytes) : inputBytes;
@@ -184,7 +237,7 @@ export function extractManifestFromPackage(bytes: ArrayBuffer | Uint8Array, pack
   let manifestPath: string;
   let manifestRaw: string;
   try {
-    unzipped = unzipSync(zipBytes, { filter: (file) => isManifestOrLocale(file.name) });
+    unzipped = unzipSync(zipBytes, { filter: makeZipFilter() });
     const manifestEntry = findManifestEntry(unzipped);
     manifestPath = manifestEntry.path;
     manifestRaw = strFromU8(manifestEntry.bytes);
