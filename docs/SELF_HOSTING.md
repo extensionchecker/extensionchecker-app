@@ -60,12 +60,16 @@ paths.
 ```toml
 [env.production]
 name = "your-app-backend"
-routes = [{ pattern = "api.yourdomain.com", custom_domain = true }]
+# No public route needed — the frontend Worker reaches the backend via
+# its service binding.  To expose a public API, uncomment:
+# routes = [{ pattern = "api.yourdomain.com", custom_domain = true }]
 
 [env.production.vars]
-API_ALLOWED_ORIGINS = "https://app.yourdomain.com"
 API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
 ```
+
+> If you add a public backend route, also set `API_ALLOWED_ORIGINS` to
+> your frontend's origin (e.g. `https://app.yourdomain.com`).
 
 ### Frontend (`src/frontend/wrangler.toml`)
 
@@ -125,22 +129,40 @@ Check the health endpoint:
 curl https://app.yourdomain.com/health
 ```
 
-## Environment Variables
+## Environment Variables & Secrets
 
 All configuration is done through `wrangler.toml` `[vars]` sections or via the
 Cloudflare dashboard (Settings → Variables). See
 [docs/DEPLOYMENT.md](DEPLOYMENT.md) for the full reference.
 
-Key variables for self-hosters:
+### Secrets (set in Cloudflare dashboard, never in plaintext)
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `API_ALLOWED_ORIGINS` | _(none)_ | Comma-separated origins allowed to call the API cross-origin. Set this to your frontend's public URL. |
-| `API_ACCESS_TOKEN` | _(none)_ | Optional shared secret. If set, callers must send `x-extensionchecker-token` header. |
-| `API_ALLOW_REQUESTS_WITHOUT_ORIGIN` | `"false"` | Allow requests with no `Origin` header (e.g., curl, server-to-server). Only enable on trusted networks. |
-| `API_RATE_LIMIT_PER_MINUTE_PER_IP` | `"30"` | Per-IP per-minute request cap. |
-| `API_RATE_LIMIT_PER_DAY_PER_IP` | `"2000"` | Per-IP daily request cap. |
-| `API_RATE_LIMIT_GLOBAL_PER_DAY` | `"90000"` | Global daily request cap across all users. |
+Generate a strong random token:
+
+```bash
+openssl rand -hex 32
+```
+
+Set `API_ACCESS_TOKEN` as an **encrypted secret** on **both** Workers in the
+Cloudflare dashboard:
+
+- **Frontend Worker** → Settings → Variables → Encrypt → `API_ACCESS_TOKEN`
+- **Backend Worker** → Settings → Variables → Encrypt → `API_ACCESS_TOKEN`
+
+Both must have the same value. The frontend Worker injects it as the
+`x-extensionchecker-token` header on every proxied `/api/*` request. The
+backend validates it. The browser never sees the token.
+
+### Configuration variables
+
+| Variable | Worker | Default | Purpose |
+|----------|--------|---------|---------|
+| `API_ALLOWED_ORIGINS` | Backend | _(none)_ | Comma-separated CORS origins. Only needed if the backend is publicly exposed at its own domain. |
+| `API_ALLOW_REQUESTS_WITHOUT_ORIGIN` | Backend | `"false"` | Allow requests with no `Origin` header (curl, scripts). |
+| `API_RATE_LIMIT_PER_MINUTE_PER_IP` | Backend | `"30"` | Per-IP per-minute request cap. |
+| `API_RATE_LIMIT_PER_DAY_PER_IP` | Backend | `"2000"` | Per-IP daily request cap. |
+| `API_RATE_LIMIT_GLOBAL_PER_DAY` | Backend | `"90000"` | Global daily request cap across all users. |
+| `API_BACKEND_BASE_URL` | Frontend | _(none)_ | Fallback backend URL when no service binding is configured. Not needed in production. |
 
 ## Updating Your Instance
 

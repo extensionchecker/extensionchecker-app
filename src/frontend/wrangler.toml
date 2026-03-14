@@ -13,9 +13,14 @@ not_found_handling = "single-page-application"
 run_worker_first = ["/api/*", "/health"]
 
 [vars]
-# Optional fallback backend origin used when a BACKEND service binding
-# is not configured. Useful for local Worker proxy testing.
+# Fallback backend origin when no BACKEND service binding is configured
+# (local dev with `wrangler dev`).  Not needed in production.
 # API_BACKEND_BASE_URL = "http://127.0.0.1:8787"
+
+# Shared secret injected as x-extensionchecker-token on every proxied
+# /api/* request.  The browser never sees it.  Set as an ENCRYPTED
+# SECRET in the Cloudflare dashboard, never in plaintext here.
+# → wrangler secret put API_ACCESS_TOKEN --env production
 
 [env.staging]
 name = "extensionchecker-frontend-staging"

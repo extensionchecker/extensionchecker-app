@@ -10,6 +10,7 @@ export type FrontendWorkerEnv = {
   ASSETS: AssetFetcher;
   BACKEND?: BackendFetcher;
   API_BACKEND_BASE_URL?: string;
+  API_ACCESS_TOKEN?: string;
 };
 
 function isBackendRoute(url: URL): boolean {
@@ -33,16 +34,27 @@ function buildBackendRequest(request: Request, backendBaseUrl: string): Request 
   return new Request(targetUrl.toString(), request);
 }
 
+function injectTokenHeader(request: Request, token: string | undefined): Request {
+  if (!token?.trim()) {
+    return request;
+  }
+  const headers = new Headers(request.headers);
+  headers.set('x-extensionchecker-token', token.trim());
+  return new Request(request.url, { ...request, headers });
+}
+
 export async function handleFrontendWorkerRequest(request: Request, env: FrontendWorkerEnv): Promise<Response> {
   const requestUrl = new URL(request.url);
 
   if (isBackendRoute(requestUrl)) {
+    const authedRequest = injectTokenHeader(request, env.API_ACCESS_TOKEN);
+
     if (env.BACKEND) {
-      return env.BACKEND.fetch(request);
+      return env.BACKEND.fetch(authedRequest);
     }
 
     if (env.API_BACKEND_BASE_URL) {
-      return fetch(buildBackendRequest(request, env.API_BACKEND_BASE_URL));
+      return fetch(buildBackendRequest(authedRequest, env.API_BACKEND_BASE_URL));
     }
 
     return jsonError(
