@@ -86,3 +86,4 @@ imported by the backend, not called over the network.
 
 [MIT](LICENSE) — free to use, modify, and self-host. See
 [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) for what that means in practice.
+
