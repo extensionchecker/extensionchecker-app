@@ -260,3 +260,12 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,macos,linux,git,node,react,venv,dotenv
+*.pfx
+*.p12
+*.pem
+*.key
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example

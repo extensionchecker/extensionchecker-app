@@ -19,7 +19,9 @@
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "dev": "wrangler dev --ip 0.0.0.0 --port 8787"
+    "dev": "wrangler dev --ip 0.0.0.0 --port 8787",
+    "deploy": "wrangler deploy",
+    "deploy:staging": "wrangler deploy --env staging"
   },
   "dependencies": {
     "@extensionchecker/engine": "0.1.0",

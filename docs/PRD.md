@@ -161,7 +161,7 @@ The companion `extensionchecker-site` repository will power `extensionchecker.co
 
 ### Cloudflare Requirement
 
-The public deployment target should use Cloudflare in a minimal, practical way. The intended model is Cloudflare Pages for the frontend and a single Cloudflare Worker for the backend API. The analysis engine should not be deployed as a separate network service in version one. Instead, it should exist as a shared library or package used by the backend.
+The public deployment target should use Cloudflare in a minimal, practical way. The intended model is Cloudflare Pages for the frontend and a single Cloudflare Worker for the backend API. A Worker static-assets frontend is also acceptable when it materially simplifies same-origin API routing, preserves the monorepo package boundaries, and does not introduce a separate deployed engine service. The analysis engine should not be deployed as a separate network service in version one. Instead, it should exist as a shared library or package used by the backend.
 
 ### Caching and Persistence
 

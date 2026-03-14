@@ -1,6 +1,10 @@
+#:schema ../node_modules/wrangler/config-schema.json
 name = "extensionchecker-backend"
 main = "src/worker.ts"
 compatibility_date = "2026-03-11"
+
+[observability]
+enabled = true
 
 [vars]
 # Comma-separated absolute origins allowed to call /api/* cross-origin.
@@ -18,3 +22,17 @@ compatibility_date = "2026-03-11"
 # API_RATE_LIMIT_PER_MINUTE_PER_IP = "30"
 # API_RATE_LIMIT_PER_DAY_PER_IP = "2000"
 # API_RATE_LIMIT_GLOBAL_PER_DAY = "90000"
+
+[env.staging]
+name = "extensionchecker-backend-staging"
+
+[env.staging.vars]
+API_ALLOWED_ORIGINS = "https://staging.extensionchecker.org"
+API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
+
+[env.production]
+name = "extensionchecker-backend-production"
+
+[env.production.vars]
+API_ALLOWED_ORIGINS = "https://extensionchecker.org"
+API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"

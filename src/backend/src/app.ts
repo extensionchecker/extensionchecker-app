@@ -186,8 +186,10 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     context.header('x-content-type-options', 'nosniff');
     context.header('x-frame-options', 'DENY');
     context.header('referrer-policy', 'no-referrer');
+    context.header('permissions-policy', 'accelerometer=(), ambient-light-sensor=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
     context.header('cross-origin-resource-policy', 'same-origin');
     context.header('cross-origin-opener-policy', 'same-origin');
+    context.header('strict-transport-security', 'max-age=31536000');
   });
 
   app.use('/api/*', async (context, next) => {

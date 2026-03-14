@@ -1,7 +1,32 @@
+#:schema ../node_modules/wrangler/config-schema.json
 name = "extensionchecker-frontend"
 main = "worker.ts"
 compatibility_date = "2026-03-11"
 
+[observability]
+enabled = true
+
 [assets]
 directory = "./dist"
 binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/health"]
+
+[vars]
+# Optional fallback backend origin used when a BACKEND service binding
+# is not configured. Useful for local Worker proxy testing.
+# API_BACKEND_BASE_URL = "http://127.0.0.1:8787"
+
+[env.staging]
+name = "extensionchecker-frontend-staging"
+
+[[env.staging.services]]
+binding = "BACKEND"
+service = "extensionchecker-backend-staging"
+
+[env.production]
+name = "extensionchecker-frontend-production"
+
+[[env.production.services]]
+binding = "BACKEND"
+service = "extensionchecker-backend-production"
