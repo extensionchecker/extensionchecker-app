@@ -356,6 +356,12 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   const rateLimiter = new InMemoryRateLimiter();
   const app = new Hono();
 
+  app.onError((error, context) => {
+    console.error('Unhandled backend error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error.';
+    return context.json({ error: message }, 500);
+  });
+
   app.use('*', async (context, next) => {
     await next();
 
@@ -569,7 +575,14 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         return context.json({ error: message }, 400);
       }
 
-      const reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength);
+      let reportResult: ReturnType<typeof buildReportFromManifest>;
+      try {
+        reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Report generation failed.';
+        return context.json({ error: message }, 500);
+      }
+
       if (!reportResult.ok) {
         return reportResult.response;
       }
@@ -634,8 +647,14 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
         await emitProgress('complete', 'Analysis complete.', 100);
         await stream.writeSSE({ event: 'result', data: JSON.stringify(reportResult.report) });
-      } catch {
-        await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Unexpected stream error.' }) });
+      } catch (error) {
+        console.error('Unhandled SSE stream error:', error);
+        const message = error instanceof Error ? error.message : 'Unexpected stream error.';
+        try {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: message }) });
+        } catch {
+          // Stream already closed; nothing more we can do.
+        }
       }
     });
   });
