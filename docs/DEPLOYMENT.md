@@ -26,8 +26,7 @@ the backend can authenticate requests without exposing the token to browsers.
 | Frontend | `app.extensionchecker.org` | Public web application (only public-facing endpoint) |
 
 The frontend domain is configured as a Cloudflare Worker custom domain in
-`src/frontend/wrangler.toml` under `[env.production]`. It is **not**
-hard-coded in application code.
+`src/frontend/wrangler.toml`. It is **not** hard-coded in application code.
 
 The backend has no public route — it is reachable only through the frontend
 Worker's service binding. To expose a public API for external consumers,
@@ -54,8 +53,9 @@ add a `routes` entry to `src/backend/wrangler.toml` and set
 
 ### Staging
 
-Same architecture, using `staging.extensionchecker.org` origins. See the
-`[env.staging]` sections in each `wrangler.toml`.
+The Cloudflare Git integration handles staging via preview branches.
+Push to a non-`main` branch and Cloudflare deploys a preview environment
+automatically.
 
 ## Environment Variables
 
@@ -79,9 +79,8 @@ Same architecture, using `staging.extensionchecker.org` origins. See the
 | `API_RATE_LIMIT_GLOBAL_PER_DAY` | `wrangler.toml` [vars] | `"90000"` | Global daily request cap. |
 
 Secrets should be set in the Cloudflare dashboard (Settings → Variables →
-Encrypt). Non-secret configuration can go in `wrangler.toml` `[vars]` or
-`[env.production.vars]`. For local Wrangler development, use a `.dev.vars`
-file.
+Encrypt). Non-secret configuration can go in `wrangler.toml` `[vars]`.
+For local Wrangler development, use a `.dev.vars` file.
 
 ## Self-Hosting
 

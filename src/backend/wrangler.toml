@@ -3,19 +3,23 @@ name = "extensionchecker-backend"
 main = "src/worker.ts"
 compatibility_date = "2026-03-11"
 
+# No public route — reachable only via the frontend Worker's service binding.
+# To expose a public API, add:
+# routes = [{ pattern = "api.yourdomain.com", custom_domain = true }]
+
 [observability]
 enabled = true
 
 [vars]
 # Comma-separated absolute origins allowed to call /api/* cross-origin.
-# Same-origin requests are always permitted.  Set in [env.*.vars] per
-# environment — leave blank here.
+# Same-origin requests are always permitted.  Only needed if the backend
+# is exposed publicly at its own domain.
 # API_ALLOWED_ORIGINS = ""
 
 # Shared secret for API requests — callers must send
 # x-extensionchecker-token header.  Set as an ENCRYPTED SECRET in the
 # Cloudflare dashboard, never in plaintext here.
-# → wrangler secret put API_ACCESS_TOKEN --env production
+# → wrangler secret put API_ACCESS_TOKEN
 
 # Set true only for trusted server-to-server environments.
 API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
@@ -24,19 +28,4 @@ API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
 API_RATE_LIMIT_PER_MINUTE_PER_IP = "30"
 API_RATE_LIMIT_PER_DAY_PER_IP = "2000"
 API_RATE_LIMIT_GLOBAL_PER_DAY = "90000"
-
-[env.staging]
-name = "extensionchecker-backend-staging"
-
-[env.staging.vars]
-API_ALLOWED_ORIGINS = "https://staging.extensionchecker.org"
-
-[env.production]
-name = "extensionchecker-backend-production"
-# No public route — reachable only via the frontend Worker's service binding.
-# To expose a public API, uncomment:
-# routes = [{ pattern = "api.yourdomain.com", custom_domain = true }]
-
-[env.production.vars]
-API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
 

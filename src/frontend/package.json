@@ -10,8 +10,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "dev": "vite --host 0.0.0.0",
-    "deploy": "npm run build && wrangler deploy",
-    "deploy:staging": "npm run build && wrangler deploy --env staging"
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@extensionchecker/shared": "0.1.0",

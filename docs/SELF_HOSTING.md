@@ -57,28 +57,32 @@ paths.
 
 ### Backend (`src/backend/wrangler.toml`)
 
-```toml
-[env.production]
-name = "your-app-backend"
-# No public route needed — the frontend Worker reaches the backend via
-# its service binding.  To expose a public API, uncomment:
-# routes = [{ pattern = "api.yourdomain.com", custom_domain = true }]
+Change the `name` field at the top of the file:
 
-[env.production.vars]
-API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
+```toml
+name = "your-app-backend"
 ```
 
-> If you add a public backend route, also set `API_ALLOWED_ORIGINS` to
-> your frontend's origin (e.g. `https://app.yourdomain.com`).
+The backend has no public route by default — the frontend reaches it via
+a service binding. To expose a public API, add a `routes` line:
+
+```toml
+routes = [{ pattern = "api.yourdomain.com", custom_domain = true }]
+```
+
+> If you add a public route, also set `API_ALLOWED_ORIGINS` to your
+> frontend's origin (e.g. `https://app.yourdomain.com`) in the Cloudflare
+> dashboard or `[vars]`.
 
 ### Frontend (`src/frontend/wrangler.toml`)
 
+Change the `name`, `routes`, and service binding target:
+
 ```toml
-[env.production]
 name = "your-app-frontend"
 routes = [{ pattern = "app.yourdomain.com", custom_domain = true }]
 
-[[env.production.services]]
+[[services]]
 binding = "BACKEND"
 service = "your-app-backend"
 ```
@@ -102,7 +106,7 @@ This opens a browser window to authorize Wrangler with your Cloudflare account.
 
 ```bash
 cd src/backend
-wrangler deploy --env production
+npx wrangler deploy
 ```
 
 Note the URL that Wrangler prints — you'll need it if you're using
@@ -115,7 +119,7 @@ The frontend must be built before deploying:
 ```bash
 cd src/frontend
 npm run build
-wrangler deploy --env production
+npx wrangler deploy
 ```
 
 ## 8. Verify Your Deployment
@@ -203,8 +207,8 @@ You are **not** required to:
 The frontend Worker references the backend by its Wrangler service name. Make
 sure:
 1. The backend is deployed first.
-2. The `service` value in the frontend's `[[env.production.services]]` matches
-   the backend's `name` in `[env.production]`.
+2. The `service` value in the frontend's `[[services]]` matches the backend's
+   `name` field.
 
 ### CORS errors in the browser
 
