@@ -174,7 +174,7 @@ graph TD
 | D-4 | Oversized remote package | A7: External downloads | Store returns an unexpectedly large package to exhaust Worker memory. | 80 MB size limit enforced; `Content-Length` header checked before download where available; `AbortSignal.timeout()` enforced (default 30s). | ✅ Mitigated |
 | D-5 | Slowloris / slow-read on external fetch | A7: External downloads | A malicious or slow external store sends bytes slowly to hold Worker connections. | `AbortSignal.timeout()` on fetch (default 30s configurable via `API_UPSTREAM_TIMEOUT_MS`). | ✅ Mitigated |
 | D-6 | Rate limit bypass via distributed IPs | A1: API endpoints | Attacker uses botnet/proxy network to distribute requests across many IPs. | Per-IP limits + global daily limit (90,000/day). Global limit provides a ceiling even with distributed sources. | ⚠️ Partial |
-| D-7 | Rate limiter memory exhaustion | A1: API endpoints | Attacker floods from millions of unique IPs to grow the in-memory rate limit map. | IP key length validated (2–64 chars); map entries have TTL based on time windows. But no explicit map size cap. | ⚠️ Partial |
+| D-7 | Rate limiter memory exhaustion | A1: API endpoints | Attacker floods from millions of unique IPs to grow the in-memory rate limit map. | IP key length validated (2–64 chars); map entries expire with time windows; new IPs beyond the 20,000-key cap are collapsed to a single `'overflow'` bucket so the map never grows unboundedly. | ✅ Mitigated |
 | D-8 | ReDoS in input parsing | A3: URLs, A4: IDs | Crafted input triggers catastrophic backtracking in regex. | URL parsing uses standard `new URL()` API (not regex); ID validation uses simple non-backtracking regexes (`/^[a-p]{32}$/`). | ✅ Mitigated |
 | D-9 | CPU exhaustion via complex manifest | A6: Manifest parsing | Manifest with extremely large permission arrays or deeply nested structures. | Zod schema enforces array-of-strings for permissions; JSON body capped at 16 KB for /api/analyze; manifest.json capped at 5 MB (from archive). | ✅ Mitigated |
 
@@ -198,20 +198,20 @@ graph TD
 
 ```mermaid
 pie title Mitigation Status (29 findings)
-    "Mitigated" : 20
-    "Partial" : 8
+    "Mitigated" : 21
+    "Partial" : 7
     "Not Mitigated" : 1
 ```
 
 | Category | Total | ✅ Mitigated | ⚠️ Partial | ❌ Not Mitigated |
-|----------|-------|-------------|-----------|-----------------|
+|----------|-------|-------------|-----------|------------------|
 | **Spoofing** | 5 | 4 | 1 | 0 |
 | **Tampering** | 6 | 5 | 1 | 0 |
 | **Repudiation** | 3 | 0 | 2 | 1 |
 | **Information Disclosure** | 6 | 4 | 2 | 0 |
-| **Denial of Service** | 9 | 6 | 3 | 0 |
+| **Denial of Service** | 9 | 7 | 2 | 0 |
 | **Elevation of Privilege** | 7 | 6 | 1 | 0 |
-| **Total** | **29** | **20** | **8** | **1** |
+| **Total** | **29** | **21** | **7** | **1** |
 
 ---
 
@@ -231,7 +231,6 @@ pie title Mitigation Status (29 findings)
 |----|---------|----------------|
 | S-2 | IP spoofing for rate limits | In non-Cloudflare deployments, `cf-connecting-ip` is unavailable. Document that self-hosters behind reverse proxies must configure trusted proxy headers. |
 | D-6 | Distributed rate limit bypass | Consider Cloudflare Rate Limiting (platform feature) or Durable Objects for persistent, distributed rate limit state. |
-| D-7 | Rate limiter map growth | Add a map size cap (e.g., LRU eviction at 100K entries) to the `InMemoryRateLimiter`. |
 | R-3 | Rate limit reset on restart | Migrate to persistent rate limiting (Cloudflare Durable Objects or KV) when operational hardening is prioritized. |
 | I-2 | Timing side-channel on token | Replace `===` with a constant-time comparison function for token validation. |
 | I-6 | Third-party JS library exfiltration | Implement a `Content-Security-Policy` header to restrict script sources, `connect-src`, and `default-src`. |
