@@ -644,6 +644,91 @@ describe('backend app', () => {
     expect(body.error).toMatch(/Failed to download extension package/);
   });
 
+  it('returns a descriptive error for Opera virtual built-in extensions (via listing URL)', async () => {
+    // Simulate: user pastes https://addons.opera.com/en/extensions/details/whatsapp-in-opera/
+    // Flow: listing URL → opera:whatsapp-in-opera → download 404 → listing page check → virtual
+    const virtualHtml = `<html><body>
+      <img src="https://addons-static.operacdn.com/static/maidenpackage/virtual/native-whatsapp/icon/icon.png">
+    </body></html>`;
+
+    globalThis.fetch = vi.fn(async (url: RequestInfo) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/extensions/download/')) {
+        return new Response('Not Found', { status: 404 });
+      }
+      if (urlStr.includes('/extensions/details/')) {
+        return new Response(virtualHtml, { status: 200, headers: { 'content-type': 'text/html' } });
+      }
+      // Scraper request — also return 404 (not needed for this test)
+      return new Response('Not Found', { status: 404 });
+    }) as typeof fetch;
+
+    const app = createApp({ scraperConfig: { chromeEnabled: false, edgeEnabled: false, operaEnabled: false } });
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'url', value: 'https://addons.opera.com/en/extensions/details/whatsapp-in-opera/' }
+      })
+    });
+
+    // URL-path download errors return 502, but the message should be descriptive.
+    expect(response.status).toBe(502);
+    const body = await response.json() as { error?: string };
+    expect(body.error).toMatch(/built-in Opera browser feature/);
+    expect(body.error).toMatch(/whatsapp-in-opera/);
+  });
+
+  it('returns a descriptive error for Opera virtual built-in extensions (via ID)', async () => {
+    // Same check but via source type: id — goes through resolveAndDownloadExtensionId.
+    const virtualHtml = `<html><body>
+      <img src="https://addons-static.operacdn.com/static/maidenpackage/virtual/native-whatsapp/icon/icon.png">
+    </body></html>`;
+
+    globalThis.fetch = vi.fn(async (url: RequestInfo) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/extensions/download/')) {
+        return new Response('Not Found', { status: 404 });
+      }
+      if (urlStr.includes('/extensions/details/')) {
+        return new Response(virtualHtml, { status: 200, headers: { 'content-type': 'text/html' } });
+      }
+      return new Response('Not Found', { status: 404 });
+    }) as typeof fetch;
+
+    const app = createApp({ scraperConfig: { chromeEnabled: false, edgeEnabled: false, operaEnabled: false } });
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'id', value: 'opera:whatsapp-in-opera' }
+      })
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json() as { error?: string };
+    expect(body.error).toMatch(/built-in Opera browser feature/);
+    expect(body.error).toMatch(/whatsapp-in-opera/);
+  });
+
+  it('returns generic 404 error for Opera extensions that simply do not exist', async () => {
+    // Download 404 + listing page also 404 → generic error, not the virtual message.
+    globalThis.fetch = vi.fn(async () => new Response('Not Found', { status: 404 })) as typeof fetch;
+
+    const app = createApp({ scraperConfig: { chromeEnabled: false, edgeEnabled: false, operaEnabled: false } });
+    const response = await requestApi(app, '/api/analyze', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        source: { type: 'id', value: 'opera:nonexistent-addon' }
+      })
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json() as { error?: string };
+    expect(body.error).toMatch(/Failed to download extension package \(404\)/);
+  });
+
   it('resolves Edge listing URL to edge update endpoint', async () => {
     const crxBytes = buildCrxManifest();
     const fetchSpy = vi.fn(async () => new Response(crxBytes, {

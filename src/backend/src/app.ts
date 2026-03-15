@@ -23,7 +23,8 @@ import {
   hasAllowedPackageExtension,
   isLikelyDirectPackageUrl,
   pickPackageKindFromUpload,
-  resolveAndDownloadExtensionId
+  resolveAndDownloadExtensionId,
+  resolveOperaDownloadError
 } from './download';
 import { buildReportFromManifest } from './report';
 import { dispatchStoreDataFetch } from './scrapers/index';
@@ -215,7 +216,12 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         try {
           downloaded = await downloadPackage(packageUrl, fetchImpl, securityConfig.upstreamTimeoutMs, MAX_PACKAGE_SIZE_BYTES);
         } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to download extension package.';
+          let message = error instanceof Error ? error.message : 'Failed to download extension package.';
+          // When an Opera listing URL resolves to a virtual built-in extension, give a specific error.
+          if (source.type === 'id' && source.value.startsWith('opera:')) {
+            const slug = source.value.slice('opera:'.length);
+            message = await resolveOperaDownloadError(slug, message, fetchImpl);
+          }
           return context.json({ error: message }, 502);
         }
       }
@@ -279,7 +285,12 @@ export function createApp(options: CreateAppOptions = {}): Hono {
           try {
             downloaded = await downloadPackage(capturedPackageUrl, fetchImpl, securityConfig.upstreamTimeoutMs, MAX_PACKAGE_SIZE_BYTES);
           } catch (error) {
-            const message = error instanceof Error ? error.message : 'Failed to download extension package.';
+            let message = error instanceof Error ? error.message : 'Failed to download extension package.';
+            // When an Opera listing URL resolves to a virtual built-in extension, give a specific error.
+            if (capturedSource.type === 'id' && capturedSource.value.startsWith('opera:')) {
+              const slug = capturedSource.value.slice('opera:'.length);
+              message = await resolveOperaDownloadError(slug, message, fetchImpl);
+            }
             await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: message }) });
             return;
           }

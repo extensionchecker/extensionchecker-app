@@ -4,6 +4,80 @@ import { resolveExtensionIdCandidates } from './id-resolution';
 import { validatePublicFetchUrl } from './url-safety';
 import type { AnalyzeSource } from './schemas';
 
+/**
+ * Opera Add-ons lists "virtual" built-in browser features (WhatsApp sidebar,
+ * VPN, ad-blocker, etc.) alongside real installable extensions. Virtual
+ * extensions have no downloadable CRX package, so their download endpoint
+ * returns 404. Their listing pages serve static assets from this CDN path.
+ */
+const OPERA_VIRTUAL_MARKER = 'maidenpackage/virtual';
+const OPERA_LISTING_BASE = 'https://addons.opera.com/en/extensions/details/';
+const OPERA_LISTING_TIMEOUT_MS = 6_000;
+const OPERA_LISTING_MAX_BYTES = 150_000;
+
+/**
+ * Returns true when the Opera Add-ons listing for the given slug is a
+ * virtual built-in browser feature rather than a real installable extension.
+ * Any network/parse failure returns false so the caller keeps the original
+ * download error.
+ */
+async function isOperaVirtualExtension(
+  slug: string,
+  fetchImpl: typeof fetch
+): Promise<boolean> {
+  const listingUrl = `${OPERA_LISTING_BASE}${encodeURIComponent(slug)}/`;
+  const validated = validatePublicFetchUrl(listingUrl);
+  if (!validated.ok) return false;
+
+  let response: Response;
+  try {
+    response = await fetchImpl(validated.url.toString(), {
+      signal: AbortSignal.timeout(OPERA_LISTING_TIMEOUT_MS)
+    });
+  } catch {
+    return false;
+  }
+
+  if (!response.ok) return false;
+
+  // Read only up to OPERA_LISTING_MAX_BYTES to avoid buffering the full page.
+  let text: string;
+  try {
+    const arrayBuffer = await response.arrayBuffer();
+    const chunk = arrayBuffer.byteLength > OPERA_LISTING_MAX_BYTES
+      ? arrayBuffer.slice(0, OPERA_LISTING_MAX_BYTES)
+      : arrayBuffer;
+    text = new TextDecoder().decode(chunk);
+  } catch {
+    return false;
+  }
+
+  return text.includes(OPERA_VIRTUAL_MARKER);
+}
+
+/**
+ * Returns an enhanced error message when an Opera download 404 is caused by
+ * the extension being a virtual built-in browser feature. Falls back to the
+ * original message for real download failures or when the listing check fails.
+ *
+ * Exported so that the app layer can call it for URL-path downloads (which
+ * bypass resolveAndDownloadExtensionId) without duplicating detection logic.
+ */
+export async function resolveOperaDownloadError(
+  slug: string,
+  originalMessage: string,
+  fetchImpl: typeof fetch
+): Promise<string> {
+  if (!originalMessage.includes('(404)')) return originalMessage;
+  const isVirtual = await isOperaVirtualExtension(slug, fetchImpl);
+  if (!isVirtual) return originalMessage;
+  return (
+    `"${slug}" is a built-in Opera browser feature, not an installable extension. ` +
+    'There is no extension package to analyze. ' +
+    'Try a different Opera extension, or upload a .crx file if you have the package.'
+  );
+}
+
 export type DownloadedPackage = {
   bytes: ArrayBuffer;
   contentType: string | null;
@@ -134,7 +208,16 @@ export async function resolveAndDownloadExtensionId(
         }
       };
     } catch (error) {
-      lastErrorMessage = error instanceof Error ? error.message : 'Failed to download extension package.';
+      const rawMessage = error instanceof Error ? error.message : 'Failed to download extension package.';
+
+      // When Opera returns 404, check if this is a virtual built-in feature
+      // (WhatsApp sidebar, VPN, ad-blocker, etc.) rather than a real extension.
+      if (candidate.ecosystem === 'opera' && rawMessage.includes('(404)')) {
+        lastErrorMessage = await resolveOperaDownloadError(candidate.canonicalId, rawMessage, fetchImpl);
+        continue;
+      }
+
+      lastErrorMessage = rawMessage;
     }
   }
 
