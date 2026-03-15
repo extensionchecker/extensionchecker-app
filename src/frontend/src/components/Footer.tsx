@@ -20,7 +20,7 @@ export function Footer({ appVersion, onNavigate }: FooterProps) {
         {appVersion ? (
           <>
             <span className="footer-sep" aria-hidden="true">&middot;</span>
-            <span className="footer-version">v{appVersion}</span>
+            <span>v{appVersion}</span>
           </>
         ) : null}
       </div>
