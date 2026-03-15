@@ -10,6 +10,12 @@ export type ScrapedStoreData = {
   rating?: number;
   ratingCount?: number;
   userCount?: number;
+  /** Short description as shown on the store listing page. */
+  description?: string;
+  /** Developer homepage URL extracted from the store listing. */
+  developerUrl?: string;
+  /** Extension homepage URL extracted from the store listing. */
+  homepageUrl?: string;
 };
 
 /**

@@ -4,10 +4,25 @@ import { AnalysisReportSchema, type StoreMetadata } from '@extensionchecker/shar
 import { ManifestSchema, type ReportSource } from './schemas';
 import type { StoreDataResult } from './scrapers/types';
 
+/** Returns true when a manifest string value is an i18n message placeholder. */
+function isLocalizationPlaceholder(value: string): boolean {
+  return /^__MSG_[A-Za-z0-9_]+__$/.test(value.trim());
+}
+
+/** Returns true only for safe, absolute HTTPS URLs (no private IP ranges, etc.). */
+function isSafeHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function extractStoreMetadata(manifest: z.infer<typeof ManifestSchema>, packageSizeBytes: number, storeUrl: string | null): StoreMetadata {
   const meta: StoreMetadata = {};
 
-  if (manifest.description) {
+  // Skip i18n placeholders - they are unresolved message keys, not real descriptions.
+  if (manifest.description && !isLocalizationPlaceholder(manifest.description)) {
     meta.description = manifest.description;
   }
 
@@ -111,10 +126,19 @@ export function buildReportFromManifest(
 
   // Merge scraped store data into storeMetadata when the fetch succeeded.
   if (storeResult.attempted && storeResult.data !== null) {
-    const { rating, ratingCount, userCount } = storeResult.data;
+    const { rating, ratingCount, userCount, description, developerUrl, homepageUrl } = storeResult.data;
     if (rating !== undefined) storeMetadata.rating = rating;
     if (ratingCount !== undefined) storeMetadata.ratingCount = ratingCount;
     if (userCount !== undefined) storeMetadata.userCount = userCount;
+    // Fill description from scraped store listing when manifest lacks a real one.
+    if (description && !storeMetadata.description) storeMetadata.description = description;
+    // Fill developer/homepage URLs from scraped listing when not in manifest.
+    if (developerUrl && !storeMetadata.developerUrl && isSafeHttpsUrl(developerUrl)) {
+      storeMetadata.developerUrl = developerUrl;
+    }
+    if (homepageUrl && !storeMetadata.homepageUrl && isSafeHttpsUrl(homepageUrl)) {
+      storeMetadata.homepageUrl = homepageUrl;
+    }
   }
 
   // Compute composite score when store trust signals (rating or user count) are present.

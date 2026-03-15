@@ -3,14 +3,20 @@ import { fetchAmoStoreData } from '../src/store-metadata';
 
 const AMO_API_BASE = 'https://addons.mozilla.org/api/v5/addons/addon/';
 
-function buildAmoResponse(averageDailyUsers: number, averageRating: number, ratingCount: number) {
+function buildAmoResponse(
+  averageDailyUsers: number,
+  averageRating: number,
+  ratingCount: number,
+  extras: Record<string, unknown> = {}
+) {
   return new Response(
     JSON.stringify({
       average_daily_users: averageDailyUsers,
       ratings: {
         average: averageRating,
         count: ratingCount
-      }
+      },
+      ...extras
     }),
     { status: 200, headers: { 'content-type': 'application/json' } }
   );
@@ -29,6 +35,62 @@ describe('fetchAmoStoreData', () => {
       `${AMO_API_BASE}ublock-origin/`,
       expect.objectContaining({ headers: expect.anything() })
     );
+  });
+
+  it('extracts homepageUrl from AMO homepage.url (localized en-US)', async () => {
+    const mockFetch = vi.fn(async () =>
+      buildAmoResponse(100_000, 4.5, 500, {
+        homepage: { url: { 'en-US': 'https://1password.com' } }
+      })
+    );
+    const result = await fetchAmoStoreData('1password', mockFetch as unknown as typeof fetch);
+    expect(result?.homepageUrl).toBe('https://1password.com');
+  });
+
+  it('extracts homepageUrl from AMO homepage.url when it is a plain string', async () => {
+    const mockFetch = vi.fn(async () =>
+      buildAmoResponse(50_000, 4.0, 200, {
+        homepage: { url: 'https://example.com' }
+      })
+    );
+    const result = await fetchAmoStoreData('some-addon', mockFetch as unknown as typeof fetch);
+    expect(result?.homepageUrl).toBe('https://example.com');
+  });
+
+  it('does not include homepageUrl for non-https URLs', async () => {
+    const mockFetch = vi.fn(async () =>
+      buildAmoResponse(50_000, 4.0, 200, {
+        homepage: { url: { 'en-US': 'http://insecure.example.com' } }
+      })
+    );
+    const result = await fetchAmoStoreData('some-addon', mockFetch as unknown as typeof fetch);
+    expect(result?.homepageUrl).toBeUndefined();
+  });
+
+  it('extracts description from AMO summary (localized en-US)', async () => {
+    const mockFetch = vi.fn(async () =>
+      buildAmoResponse(200_000, 4.8, 1000, {
+        summary: { 'en-US': 'The best password manager.' }
+      })
+    );
+    const result = await fetchAmoStoreData('1password', mockFetch as unknown as typeof fetch);
+    expect(result?.description).toBe('The best password manager.');
+  });
+
+  it('extracts description from AMO summary when it is a plain string', async () => {
+    const mockFetch = vi.fn(async () =>
+      buildAmoResponse(200_000, 4.8, 1000, {
+        summary: 'Blocks ads and trackers.'
+      })
+    );
+    const result = await fetchAmoStoreData('ublock-origin', mockFetch as unknown as typeof fetch);
+    expect(result?.description).toBe('Blocks ads and trackers.');
+  });
+
+  it('returns undefined description when summary is absent', async () => {
+    const mockFetch = vi.fn(async () => buildAmoResponse(100_000, 4.5, 300));
+    const result = await fetchAmoStoreData('addon', mockFetch as unknown as typeof fetch);
+    expect(result?.description).toBeUndefined();
   });
 
   it('returns null when the HTTP response is not ok', async () => {

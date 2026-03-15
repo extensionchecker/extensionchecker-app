@@ -32,7 +32,11 @@ const EdgeAddOnDetailSchema = z.object({
   ratingsCount: z.number().int().min(0).optional(),
   activeInstallCount: z.number().int().min(0).optional(),
   activeTotalInstalls: z.number().int().min(0).optional(),
-  installCount: z.number().int().min(0).optional()
+  installCount: z.number().int().min(0).optional(),
+  // Developer homepage URL - field name varies across Edge Add-ons page versions.
+  developerWebsite: z.string().optional(),
+  developerHomepage: z.string().optional(),
+  developerUrl: z.string().optional()
 });
 
 function extractNextData(html: string): unknown {
@@ -105,11 +109,24 @@ export async function fetchEdgeStoreData(
   const ratingCount = d.numberOfRatings ?? d.ratingsCount;
   const userCount = d.activeInstallCount ?? d.activeTotalInstalls ?? d.installCount;
 
-  if (rating === undefined && userCount === undefined) return null;
+  // Accept the first developer URL variant that looks like a safe HTTPS URL.
+  const rawDevUrl = d.developerWebsite ?? d.developerHomepage ?? d.developerUrl;
+  const developerUrl = rawDevUrl && isHttpsUrl(rawDevUrl) ? rawDevUrl : undefined;
+
+  if (rating === undefined && userCount === undefined && developerUrl === undefined) return null;
 
   return {
     ...(rating !== undefined ? { rating } : {}),
     ...(ratingCount !== undefined ? { ratingCount } : {}),
-    ...(userCount !== undefined ? { userCount } : {})
+    ...(userCount !== undefined ? { userCount } : {}),
+    ...(developerUrl !== undefined ? { developerUrl } : {})
   };
+}
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }

@@ -138,4 +138,32 @@ describe('fetchChromeStoreData', () => {
     }) as unknown as typeof fetch;
     expect(await fetchChromeStoreData('extid', fetchMock)).toBeNull();
   });
+
+  it('extracts homepageUrl from JSON-LD author.url when it is a valid https URL', async () => {
+    const html = makeHtml(jsonLd({
+      '@type': 'SoftwareApplication',
+      author: { '@type': 'Organization', name: 'AgileBits', url: 'https://1password.com' },
+      aggregateRating: { ratingValue: '4.6', ratingCount: '900' }
+    }));
+    const result = await fetchChromeStoreData('extid', mockFetch(html));
+    expect(result?.homepageUrl).toBe('https://1password.com');
+  });
+
+  it('does not include homepageUrl for non-https author URLs', async () => {
+    const html = makeHtml(jsonLd({
+      author: { url: 'http://insecure.example.com' },
+      interactionStatistic: { userInteractionCount: '5000' }
+    }));
+    const result = await fetchChromeStoreData('extid', mockFetch(html));
+    expect(result?.homepageUrl).toBeUndefined();
+    expect(result?.userCount).toBe(5000);
+  });
+
+  it('returns a result with only homepageUrl when no rating or userCount signals exist', async () => {
+    const html = makeHtml(jsonLd({
+      author: { url: 'https://developer.example.com' }
+    }));
+    const result = await fetchChromeStoreData('extid', mockFetch(html));
+    expect(result).toEqual({ homepageUrl: 'https://developer.example.com' });
+  });
 });

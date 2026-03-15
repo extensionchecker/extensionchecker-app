@@ -38,6 +38,10 @@ const AggregateRatingSchema = z.object({
         .optional()
         .transform((v) => (v !== undefined ? parseInt(String(v).replace(/,/g, ''), 10) : undefined))
     })
+    .optional(),
+  // schema.org author/publisher with optional URL (developer homepage).
+  author: z
+    .object({ url: z.string().optional() })
     .optional()
 });
 
@@ -133,17 +137,23 @@ export async function fetchChromeStoreData(
     return null;
   }
 
-  // Parse JSON-LD blocks for rating.
+  // Parse JSON-LD blocks for rating and developer homepage.
   let rating: number | undefined;
   let ratingCount: number | undefined;
+  let homepageUrl: string | undefined;
   const blocks = extractJsonLdBlocks(html);
   for (const block of blocks) {
     const parsed = AggregateRatingSchema.safeParse(block);
-    if (parsed.success && parsed.data.aggregateRating) {
-      const ar = parsed.data.aggregateRating;
-      rating = ar.ratingValue;
-      ratingCount = ar.ratingCount ?? ar.reviewCount;
-      break;
+    if (parsed.success) {
+      if (parsed.data.aggregateRating && rating === undefined) {
+        const ar = parsed.data.aggregateRating;
+        rating = ar.ratingValue;
+        ratingCount = ar.ratingCount ?? ar.reviewCount;
+      }
+      if (homepageUrl === undefined && parsed.data.author?.url) {
+        const url = parsed.data.author.url;
+        if (isHttpsUrl(url)) homepageUrl = url;
+      }
     }
   }
 
@@ -156,11 +166,20 @@ export async function fetchChromeStoreData(
 
   // Return null rather than an empty object - partial data with at least one
   // signal is useful; a completely empty result is not.
-  if (rating === undefined && userCount === undefined) return null;
+  if (rating === undefined && userCount === undefined && homepageUrl === undefined) return null;
 
   return {
     ...(rating !== undefined ? { rating } : {}),
     ...(ratingCount !== undefined ? { ratingCount } : {}),
-    ...(userCount !== undefined ? { userCount } : {})
+    ...(userCount !== undefined ? { userCount } : {}),
+    ...(homepageUrl !== undefined ? { homepageUrl } : {})
   };
+}
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
