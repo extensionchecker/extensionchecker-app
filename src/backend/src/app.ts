@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
+import { InMemoryRateLimiter } from './rate-limiter';
 import {
-  InMemoryRateLimiter,
   buildSecurityConfig,
   mergeSecurityConfig,
   type BackendSecurityEnv,
   type SecurityConfigInput
-} from './security';
+} from './security-config';
 import { buildScraperConfig, type ScraperConfig } from './scrapers/scraper-config';
 import type { KvNamespace } from './scrapers/kv-cache';
 import { registerSecurityHeaders, registerApiMiddleware } from './middleware';

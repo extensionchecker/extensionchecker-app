@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { InMemoryRateLimiter, buildRateLimitErrorMessage } from '../src/rate-limiter';
+import { buildSecurityConfig, parseAllowedOrigins } from '../src/security-config';
 import {
-  InMemoryRateLimiter,
-  buildRateLimitErrorMessage,
-  buildSecurityConfig,
   hasValidApiAccessToken,
   isJsonContentType,
   isMultipartContentType,
   isOriginAllowed,
-  parseAllowedOrigins,
   parseRequestOrigin,
   resolveClientKey
 } from '../src/security';

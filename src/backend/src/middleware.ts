@@ -1,13 +1,7 @@
 import type { Hono } from 'hono';
-import {
-  InMemoryRateLimiter,
-  buildRateLimitErrorMessage,
-  hasValidApiAccessToken,
-  isOriginAllowed,
-  parseRequestOrigin,
-  resolveClientKey,
-  type SecurityConfig
-} from './security';
+import { InMemoryRateLimiter, buildRateLimitErrorMessage } from './rate-limiter';
+import { hasValidApiAccessToken, isOriginAllowed, parseRequestOrigin, resolveClientKey } from './security';
+import type { SecurityConfig } from './security-config';
 
 export function registerSecurityHeaders(app: Hono): void {
   app.use('*', async (context, next) => {

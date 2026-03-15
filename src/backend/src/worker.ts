@@ -1,5 +1,5 @@
 import { createApp } from './app';
-import type { BackendSecurityEnv } from './security';
+import type { BackendSecurityEnv } from './security-config';
 import type { CleanupKvNamespace } from './scrapers/kv-cleanup';
 import { pruneExpiredCacheEntries } from './scrapers/kv-cleanup';
 

@@ -1,4 +1,4 @@
-import type { SecurityConfig } from './security';
+import type { SecurityConfig } from './security-config';
 import type { ScraperConfig } from './scrapers/scraper-config';
 import type { KvNamespace } from './scrapers/kv-cache';
 
