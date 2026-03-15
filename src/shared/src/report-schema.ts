@@ -74,7 +74,25 @@ export const StoreMetadataSchema = z.object({
   screenshots: z.array(z.string()).optional()
 });
 
-export const ScoringBasisSchema = z.enum(['manifest-only', 'manifest-and-store']);
+export const ScoringBasisSchema = z.enum([
+  'manifest-only',
+  'manifest-and-store',
+  /**
+   * Store scraping was attempted for this ecosystem (Chrome, Edge, Opera) but
+   * the request failed — network error, rate-limit, unexpected page structure,
+   * or the store returned no usable data.
+   *
+   * Scoring falls back to manifest-only, but the UI surfaces a grayed-out
+   * "Unavailable" store donut so users understand why store signals are absent.
+   */
+  'manifest-store-unavailable',
+  /**
+   * Fresh scraping failed, but a KV-cached entry from a previous successful
+   * scrape was used as a fallback. The report carries `storeDataCachedAt` so
+   * the UI can show "from cache · X days ago" next to the store donut.
+   */
+  'manifest-and-store-cached'
+]);
 
 export const AnalysisReportSchema = z.object({
   reportVersion: z.literal('1.0.0'),
@@ -89,7 +107,12 @@ export const AnalysisReportSchema = z.object({
   summary: z.string().min(1),
   limits: AnalysisLimitsSchema,
   storeMetadata: StoreMetadataSchema.optional(),
-  scoringBasis: ScoringBasisSchema.optional()
+  scoringBasis: ScoringBasisSchema.optional(),
+  /**
+   * ISO 8601 timestamp of when store metadata was originally scraped.
+   * Only present when `scoringBasis === 'manifest-and-store-cached'`.
+   */
+  storeDataCachedAt: z.string().datetime().optional()
 });
 
 export const AnalysisProgressStepSchema = z.enum([

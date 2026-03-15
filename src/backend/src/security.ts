@@ -25,6 +25,11 @@ export type BackendSecurityEnv = {
   API_UPSTREAM_TIMEOUT_MS?: string;
   API_ALLOW_REQUESTS_WITHOUT_ORIGIN?: string;
   API_ACCESS_TOKEN?: string;
+  // Per-store HTML scraper feature flags. Set to "false", "0", or "no" to
+  // disable a scraper without disabling manifest-only fallback scoring.
+  SCRAPER_CHROME_ENABLED?: string;
+  SCRAPER_EDGE_ENABLED?: string;
+  SCRAPER_OPERA_ENABLED?: string;
 };
 
 export type SecurityConfig = {

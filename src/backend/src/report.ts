@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { analyzeManifest, computeStoreTrustScore, computeCompositeScore, toSeverity } from '@extensionchecker/engine';
 import { AnalysisReportSchema, type StoreMetadata } from '@extensionchecker/shared';
 import { ManifestSchema, type ReportSource } from './schemas';
-import type { AmoStoreData } from './store-metadata';
+import type { StoreDataResult } from './scrapers/types';
 
 export function extractStoreMetadata(manifest: z.infer<typeof ManifestSchema>, packageSizeBytes: number, storeUrl: string | null): StoreMetadata {
   const meta: StoreMetadata = {};
@@ -90,7 +90,7 @@ export function buildReportFromManifest(
   manifestRaw: unknown,
   source: ReportSource,
   packageSizeBytes: number,
-  amoStoreData?: AmoStoreData | null
+  storeResult: StoreDataResult = { attempted: false }
 ) {
   const parsedManifest = ManifestSchema.safeParse(manifestRaw);
   if (!parsedManifest.success) {
@@ -109,11 +109,12 @@ export function buildReportFromManifest(
   const storeUrl = resolveStoreUrl(source);
   const storeMetadata = extractStoreMetadata(parsedManifest.data, packageSizeBytes, storeUrl);
 
-  // Merge live store data from AMO when available.
-  if (amoStoreData) {
-    storeMetadata.rating = amoStoreData.rating;
-    storeMetadata.ratingCount = amoStoreData.ratingCount;
-    storeMetadata.userCount = amoStoreData.userCount;
+  // Merge scraped store data into storeMetadata when the fetch succeeded.
+  if (storeResult.attempted && storeResult.data !== null) {
+    const { rating, ratingCount, userCount } = storeResult.data;
+    if (rating !== undefined) storeMetadata.rating = rating;
+    if (ratingCount !== undefined) storeMetadata.ratingCount = ratingCount;
+    if (userCount !== undefined) storeMetadata.userCount = userCount;
   }
 
   // Compute composite score when store trust signals (rating or user count) are present.
@@ -121,14 +122,27 @@ export function buildReportFromManifest(
   const storeTrustScore = computeStoreTrustScore(storeMetadata.rating, storeMetadata.userCount);
 
   let overallScore: number;
-  let scoringBasis: 'manifest-only' | 'manifest-and-store';
+  let scoringBasis: 'manifest-only' | 'manifest-and-store' | 'manifest-and-store-cached' | 'manifest-store-unavailable';
+  let storeDataCachedAt: string | undefined;
 
-  if (storeTrustScore !== null) {
-    overallScore = computeCompositeScore(permissionsScore, storeTrustScore);
-    scoringBasis = 'manifest-and-store';
-  } else {
+  if (!storeResult.attempted) {
+    // File upload, Safari, or scraper explicitly disabled — no store context.
     overallScore = permissionsScore;
     scoringBasis = 'manifest-only';
+  } else if (storeResult.data !== null && storeTrustScore !== null) {
+    // Scrape (or cache fallback) produced usable trust signals.
+    overallScore = computeCompositeScore(permissionsScore, storeTrustScore);
+    // Distinguish fresh vs cached so the UI can surface a staleness note.
+    if ('fromCache' in storeResult && storeResult.fromCache) {
+      scoringBasis = 'manifest-and-store-cached';
+      storeDataCachedAt = storeResult.scrapedAt;
+    } else {
+      scoringBasis = 'manifest-and-store';
+    }
+  } else {
+    // Scrape was attempted but failed with no cache fallback available.
+    overallScore = permissionsScore;
+    scoringBasis = 'manifest-store-unavailable';
   }
 
   const overallSeverity = toSeverity(overallScore);
@@ -138,13 +152,16 @@ export function buildReportFromManifest(
     score: {
       value: overallScore,
       severity: overallSeverity,
-      rationale: scoringBasis === 'manifest-and-store'
+      rationale: scoringBasis === 'manifest-and-store' || scoringBasis === 'manifest-and-store-cached'
         ? 'Score combines the capability footprint from the manifest with store trust signals (rating and user count).'
+        : scoringBasis === 'manifest-store-unavailable'
+        ? 'Score reflects the capability footprint declared in the extension manifest. Store metadata was unavailable at scan time.'
         : 'Score reflects the capability footprint declared in the extension manifest. No store trust data was available.'
     },
     permissionsScore,
     ...(storeTrustScore !== null ? { storeTrustScore } : {}),
     scoringBasis,
+    ...(storeDataCachedAt !== undefined ? { storeDataCachedAt } : {}),
     storeMetadata
   };
 

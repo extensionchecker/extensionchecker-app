@@ -26,7 +26,9 @@ import {
   resolveAndDownloadExtensionId
 } from './download';
 import { buildReportFromManifest } from './report';
-import { fetchAmoStoreData } from './store-metadata';
+import { dispatchStoreDataFetch } from './scrapers/index';
+import { buildScraperConfig, type ScraperConfig } from './scrapers/scraper-config';
+import type { KvNamespace } from './scrapers/kv-cache';
 import { registerSecurityHeaders, registerApiMiddleware } from './middleware';
 
 const MAX_ANALYZE_REQUEST_BODY_BYTES = 16 * 1024;
@@ -35,6 +37,8 @@ const MAX_UPLOAD_REQUEST_BODY_BYTES = MAX_PACKAGE_SIZE_BYTES + (2 * 1024 * 1024)
 /**
  * Extracts the Firefox add-on slug or ID from a resolved source string of the
  * form "firefox:<slug>". Returns null for all other ecosystems.
+ *
+ * @deprecated Use dispatchStoreDataFetch which handles all ecosystems.
  */
 function extractFirefoxAddonId(sourceValue: string): string | null {
   if (!sourceValue.startsWith('firefox:')) {
@@ -49,6 +53,10 @@ export type CreateAppOptions = {
   fetchImpl?: typeof fetch;
   now?: () => number;
   env?: BackendSecurityEnv;
+  /** Override scraper feature flags (useful in tests without setting env strings). */
+  scraperConfig?: ScraperConfig;
+  /** Optional KV namespace for caching scraped store metadata. */
+  kv?: KvNamespace | null;
 };
 
 function wantsEventStream(accept: string | undefined): boolean {
@@ -60,6 +68,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = options.now ?? (() => Date.now());
   const rateLimiter = new InMemoryRateLimiter();
+  const scraperConfig = options.scraperConfig ?? buildScraperConfig(options.env);
+  const kv = options.kv ?? null;
   const app = new Hono();
 
   app.onError((error, context) => {
@@ -191,13 +201,12 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     }
 
     if (!streaming) {
-      // Kick off AMO metadata fetch in parallel with package download when the
-      // source is a Firefox add-on. Failure is non-fatal — the analysis proceeds
-      // with manifest-only scoring if AMO data is unavailable.
-      const firefoxAddonId = source.type === 'id' ? extractFirefoxAddonId(source.value) : null;
-      const amoPromise = firefoxAddonId
-        ? fetchAmoStoreData(firefoxAddonId, fetchImpl, securityConfig.upstreamTimeoutMs)
-        : Promise.resolve(null);
+      // Kick off store metadata fetch in parallel with package download.
+      // Works for Firefox (AMO API), Chrome, Edge, and Opera (HTML scrapers).
+      // Failure is always non-fatal — the report falls back gracefully.
+      const storeDataPromise = source.type === 'id'
+        ? dispatchStoreDataFetch(source.value, fetchImpl, securityConfig.upstreamTimeoutMs, scraperConfig, kv)
+        : Promise.resolve({ attempted: false as const });
 
       let downloaded: DownloadedPackage;
       if (downloadedFromId) {
@@ -225,11 +234,11 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         return context.json({ error: message }, 400);
       }
 
-      const amoStoreData = await amoPromise;
+      const storeResult = await storeDataPromise;
 
       let reportResult: ReturnType<typeof buildReportFromManifest>;
       try {
-        reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength, amoStoreData);
+        reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength, storeResult);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Report generation failed.';
         return context.json({ error: message }, 500);
@@ -248,13 +257,10 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const capturedSource = source;
     const capturedDownloadedFromId = downloadedFromId;
 
-    // Start the AMO metadata fetch now so it runs in parallel with SSE download.
-    const capturedFirefoxAddonId = capturedSource.type === 'id'
-      ? extractFirefoxAddonId(capturedSource.value)
-      : null;
-    const capturedAmoPromise = capturedFirefoxAddonId
-      ? fetchAmoStoreData(capturedFirefoxAddonId, fetchImpl, securityConfig.upstreamTimeoutMs)
-      : Promise.resolve(null);
+    // Start the store metadata fetch now so it runs in parallel with SSE download.
+    const capturedStoreDataPromise = capturedSource.type === 'id'
+      ? dispatchStoreDataFetch(capturedSource.value, fetchImpl, securityConfig.upstreamTimeoutMs, scraperConfig, kv)
+      : Promise.resolve({ attempted: false as const });
 
     return streamSSE(context, async (stream) => {
       const emitProgress = async (step: AnalysisProgressStep, message: string, percent: number): Promise<void> => {
@@ -299,8 +305,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
         await emitProgress('analyzing', 'Analyzing manifest and permissions…', 80);
 
-        const amoStoreData = await capturedAmoPromise;
-        const reportResult = buildReportFromManifest(manifestRaw, capturedSource, downloaded.bytes.byteLength, amoStoreData);
+        const storeResult = await capturedStoreDataPromise;
+        const reportResult = buildReportFromManifest(manifestRaw, capturedSource, downloaded.bytes.byteLength, storeResult);
         if (!reportResult.ok) {
           await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Internal report contract violation.' }) });
           return;

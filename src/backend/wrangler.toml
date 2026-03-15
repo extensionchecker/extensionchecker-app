@@ -10,6 +10,27 @@ compatibility_date = "2026-03-11"
 [observability]
 enabled = true
 
+# KV namespace for scraper result caching.
+# Create with: wrangler kv namespace create STORE_METADATA_CACHE
+# Then replace the placeholder id below with the id from the output.
+#
+# For local development with Miniflare/wrangler dev, add a preview_id too:
+#   wrangler kv namespace create STORE_METADATA_CACHE --preview
+#
+# The binding is optional — omitting it disables caching without breaking
+# anything. The app falls back gracefully to manifest-only scoring.
+#
+# [[kv_namespaces]]
+# binding = "STORE_METADATA_CACHE"
+# id = "YOUR_KV_NAMESPACE_ID"
+# preview_id = "YOUR_KV_PREVIEW_NAMESPACE_ID"
+
+# Cron Trigger for scheduled KV cache cleanup (belt-and-suspenders alongside
+# the per-entry TTL that Cloudflare enforces automatically).
+# Runs daily at 03:00 UTC. Only takes effect in production — local dev ignores it.
+[[triggers]]
+crons = ["0 3 * * *"]
+
 [vars]
 # Comma-separated absolute origins allowed to call /api/* cross-origin.
 # Same-origin requests are always permitted.  Only needed if the backend
@@ -28,4 +49,12 @@ API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
 API_RATE_LIMIT_PER_MINUTE_PER_IP = "30"
 API_RATE_LIMIT_PER_DAY_PER_IP = "2000"
 API_RATE_LIMIT_GLOBAL_PER_DAY = "90000"
+
+# Per-store HTML scraper feature flags.
+# Set to "false" to disable a scraper without affecting manifest-only fallback.
+# Use this if a store has changed its page structure and the scraper is broken,
+# or if Cloudflare edge IPs are being rate-limited by that store.
+SCRAPER_CHROME_ENABLED = "true"
+SCRAPER_EDGE_ENABLED = "true"
+SCRAPER_OPERA_ENABLED = "true"
 

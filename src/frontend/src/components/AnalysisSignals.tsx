@@ -35,10 +35,9 @@ export function AnalysisSignals({ report }: AnalysisSignalsProps) {
   const hasStore = report.scoringBasis === 'manifest-and-store';
   const hasCode = report.limits.codeExecutionAnalysisPerformed;
 
-  // When store data IS present, the chip label identifies the specific source
-  // (Firefox Add-ons via AMO). When absent, the note explains which stores
-  // have public APIs and why Chrome / Edge / Opera cannot be included.
-  const storeChipLabel = hasStore ? 'Firefox Add-ons' : 'Store';
+  // Always label the store chip "Store" regardless of which store provided the
+  // data — the Submission Source card already identifies the specific store.
+  const storeChipLabel = 'Store';
 
   return (
     <div className="analysis-signals" aria-label="Analysis coverage">
