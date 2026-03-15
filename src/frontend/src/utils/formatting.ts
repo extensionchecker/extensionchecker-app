@@ -144,13 +144,21 @@ export function iconForTheme(theme: ThemePreference): string {
 }
 
 export function phaseTone(status: PhaseStatus): Tone {
-  return status === 'complete' ? 'good' : 'caution';
+  if (status === 'complete') return 'good';
+  if (status === 'cached') return 'info';
+  return 'caution';
 }
 
 export function phaseIcon(status: PhaseStatus): string {
-  return status === 'complete' ? 'check_circle' : 'pending';
+  if (status === 'complete') return 'check_circle';
+  if (status === 'cached') return 'history';
+  if (status === 'unavailable') return 'warning';
+  return 'pending';
 }
 
 export function phaseStatusLabel(status: PhaseStatus): string {
-  return status === 'complete' ? 'Complete' : 'Not Available';
+  if (status === 'complete') return 'Complete';
+  if (status === 'cached') return 'Cached';
+  if (status === 'unavailable') return 'Unavailable';
+  return 'Not Available';
 }

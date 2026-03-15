@@ -1,0 +1,108 @@
+import type { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
+import type { AnalysisProgressStep } from '@extensionchecker/shared';
+import { MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES, MAX_UPLOAD_REQUEST_BODY_BYTES } from './constants';
+import { extractManifestFromPackage } from './archive';
+import { isMultipartContentType } from './security';
+import type { ManifestCandidate } from './schemas';
+import { exceedsRequestSizeLimit, hasAllowedPackageExtension, pickPackageKindFromUpload } from './download';
+import { buildReportFromManifest } from './report';
+import { wantsEventStream } from './middleware';
+
+/**
+ * Registers the POST /api/analyze/upload route onto the given Hono app.
+ *
+ * Accepts a multipart/form-data body with a single `file` field containing a
+ * .zip, .xpi, or .crx package.  Responds with an AnalysisReport as JSON, or
+ * as a Server-Sent Events stream when the client sends `Accept: text/event-stream`.
+ */
+export function registerUploadRoute(app: Hono): void {
+  app.post('/api/analyze/upload', async (context) => {
+    if (!isMultipartContentType(context.req.header('content-type'))) {
+      return context.json({ error: 'Content-Type must be multipart/form-data for uploads.' }, 415);
+    }
+
+    if (exceedsRequestSizeLimit(context.req.header('content-length'), MAX_UPLOAD_REQUEST_BODY_BYTES)) {
+      return context.json({ error: `Upload request exceeds ${MAX_PACKAGE_SIZE_MEGABYTES} MB limit.` }, 413);
+    }
+
+    const formData = await context.req.raw.formData().catch(() => null);
+    const uploaded = formData?.get('file');
+
+    if (!(uploaded instanceof File)) {
+      return context.json({ error: 'Expected multipart field "file".' }, 400);
+    }
+
+    if (uploaded.size > MAX_PACKAGE_SIZE_BYTES) {
+      return context.json({ error: `Package exceeds ${MAX_PACKAGE_SIZE_MEGABYTES} MB limit.` }, 413);
+    }
+
+    if (!hasAllowedPackageExtension(uploaded.name)) {
+      return context.json({ error: 'Uploaded file extension must be .zip, .xpi, or .crx.' }, 400);
+    }
+
+    const streaming = wantsEventStream(context.req.header('accept'));
+    const packageKind = pickPackageKindFromUpload(uploaded);
+
+    if (!streaming) {
+      let manifestRaw: ManifestCandidate;
+      try {
+        manifestRaw = extractManifestFromPackage(await uploaded.arrayBuffer(), packageKind) as ManifestCandidate;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Package parsing failed.';
+        return context.json({ error: message }, 400);
+      }
+
+      const source = {
+        type: 'file' as const,
+        filename: uploaded.name,
+        mimeType: uploaded.type || 'application/octet-stream'
+      };
+
+      const reportResult = buildReportFromManifest(manifestRaw, source, uploaded.size);
+      if (!reportResult.ok) {
+        return reportResult.response;
+      }
+
+      return context.json(reportResult.report, 200);
+    }
+
+    return streamSSE(context, async (stream) => {
+      const emitProgress = async (step: AnalysisProgressStep, message: string, percent: number): Promise<void> => {
+        await stream.writeSSE({ event: 'progress', data: JSON.stringify({ step, message, percent }) });
+      };
+
+      try {
+        await emitProgress('extracting', 'Extracting manifest from package…', 40);
+
+        let manifestRaw: ManifestCandidate;
+        try {
+          manifestRaw = extractManifestFromPackage(await uploaded.arrayBuffer(), packageKind) as ManifestCandidate;
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : 'Package parsing failed.';
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: msg }) });
+          return;
+        }
+
+        await emitProgress('analyzing', 'Analyzing manifest and permissions…', 70);
+
+        const source = {
+          type: 'file' as const,
+          filename: uploaded.name,
+          mimeType: uploaded.type || 'application/octet-stream'
+        };
+
+        const reportResult = buildReportFromManifest(manifestRaw, source, uploaded.size);
+        if (!reportResult.ok) {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Internal report contract violation.' }) });
+          return;
+        }
+
+        await emitProgress('complete', 'Analysis complete.', 100);
+        await stream.writeSSE({ event: 'result', data: JSON.stringify(reportResult.report) });
+      } catch {
+        await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Unexpected stream error.' }) });
+      }
+    });
+  });
+}

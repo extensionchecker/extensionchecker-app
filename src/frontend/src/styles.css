@@ -802,8 +802,8 @@ a.extension-identity-store:hover {
 }
 
 .result-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  flex-direction: row;
   gap: 0;
   border-bottom: 1px solid var(--panel-border);
   background: color-mix(in srgb, var(--panel) 60%, transparent);
@@ -814,10 +814,9 @@ a.extension-identity-store:hover {
 }
 
 .result-tab {
-  inline-size: 100%;
-  max-inline-size: 100%;
+  flex: 0 0 auto;
   margin: 0;
-  padding: 0.6rem 0.5rem;
+  padding: 0.6rem 0.9rem;
   border: 0;
   border-bottom: 2px solid transparent;
   border-radius: 0;
@@ -1392,6 +1391,14 @@ a.extension-identity-store:hover {
   border-color: rgba(34, 197, 94, 0.42);
 }
 
+.phase-card.cached {
+  border-color: rgba(59, 130, 246, 0.42);
+}
+
+.phase-card.unavailable {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
 .phase-card.not-available {
   border-color: rgba(245, 158, 11, 0.45);
 }
@@ -1422,6 +1429,16 @@ a.extension-identity-store:hover {
 .phase-status.complete {
   border-color: rgba(34, 197, 94, 0.55);
   background: color-mix(in srgb, #22c55e 16%, transparent);
+}
+
+.phase-status.cached {
+  border-color: rgba(59, 130, 246, 0.55);
+  background: color-mix(in srgb, #3b82f6 16%, transparent);
+}
+
+.phase-status.unavailable {
+  border-color: rgba(245, 158, 11, 0.55);
+  background: color-mix(in srgb, #f59e0b 15%, transparent);
 }
 
 .phase-status.not-available {
@@ -1657,6 +1674,19 @@ a.extension-identity-store:hover {
 .app-footer a:focus-visible {
   color: var(--text);
   text-decoration: underline;
+}
+
+.footer-github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.footer-github-icon {
+  width: 0.9em;
+  height: 0.9em;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .footer-version {

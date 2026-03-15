@@ -84,3 +84,8 @@ export function registerApiMiddleware(
     await next();
   });
 }
+
+/** Returns true when the client has indicated it will accept a Server-Sent Events stream. */
+export function wantsEventStream(accept: string | undefined): boolean {
+  return typeof accept === 'string' && accept.includes('text/event-stream');
+}

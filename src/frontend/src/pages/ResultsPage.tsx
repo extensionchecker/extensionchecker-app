@@ -43,6 +43,30 @@ export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner
 
     const codePhaseStatus: PhaseStatus = report.limits.codeExecutionAnalysisPerformed ? 'complete' : 'not-available';
 
+    const scoringBasis = report.scoringBasis;
+
+    let storePhaseStatus: PhaseStatus;
+    let storePhaseDetail: string;
+
+    if (scoringBasis === 'manifest-and-store') {
+      storePhaseStatus = 'complete';
+      storePhaseDetail = 'Complete. Fresh store metadata was retrieved and incorporated into scoring.';
+    } else if (scoringBasis === 'manifest-and-store-cached') {
+      storePhaseStatus = 'cached';
+      const cachedAt = report.storeDataCachedAt
+        ? new Date(report.storeDataCachedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })
+        : 'an earlier date';
+      storePhaseDetail = `Store metadata retrieved from cache (originally scraped on ${cachedAt}). A fresh fetch was not available at analysis time. Scoring incorporates cached store signals.`;
+    } else if (scoringBasis === 'manifest-store-unavailable') {
+      storePhaseStatus = 'unavailable';
+      storePhaseDetail = 'Store lookup was attempted but returned no usable data — this may be due to a network error, a rate limit, or an unrecognized page structure. Scoring falls back to manifest analysis only.';
+    } else {
+      storePhaseStatus = 'not-available';
+      storePhaseDetail = report.source.type === 'file'
+        ? 'Not applicable. This extension was submitted as a file upload — no store lookup was performed.'
+        : 'Not applicable. No store lookup was performed for this extension.';
+    }
+
     return [
       {
         id: 'manifest',
@@ -51,8 +75,14 @@ export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner
         detail: 'Complete. Parsed manifest metadata, permissions, host access, and manifest-declared capability combinations.'
       },
       {
+        id: 'store',
+        title: 'Phase 2: Store Metadata Lookup',
+        status: storePhaseStatus,
+        detail: storePhaseDetail
+      },
+      {
         id: 'code',
-        title: 'Phase 2: Code Analysis',
+        title: 'Phase 3: Code Analysis',
         status: codePhaseStatus,
         detail: codePhaseStatus === 'complete'
           ? 'Complete. Source and behavior-level analysis was executed.'
