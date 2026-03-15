@@ -153,7 +153,7 @@ describe('backend app', () => {
 
     globalThis.fetch = fetchSpy as typeof fetch;
 
-    const app = createApp();
+    const app = createApp({ scraperConfig: { chromeEnabled: false, edgeEnabled: false, operaEnabled: false } });
     const response = await requestApi(app, '/api/analyze', {
       method: 'POST',
       headers: {
@@ -224,7 +224,7 @@ describe('backend app', () => {
 
     globalThis.fetch = fetchSpy as typeof fetch;
 
-    const app = createApp();
+    const app = createApp({ scraperConfig: { chromeEnabled: false, edgeEnabled: false, operaEnabled: false } });
     const response = await requestApi(app, '/api/analyze', {
       method: 'POST',
       headers: {
@@ -398,7 +398,7 @@ describe('backend app', () => {
     }));
     globalThis.fetch = fetchSpy as typeof fetch;
 
-    const app = createApp();
+    const app = createApp({ scraperConfig: { chromeEnabled: false, edgeEnabled: false, operaEnabled: false } });
     const response = await requestApi(app, '/api/analyze', {
       method: 'POST',
       headers: {
@@ -654,7 +654,7 @@ describe('backend app', () => {
     }));
     globalThis.fetch = fetchSpy as typeof fetch;
 
-    const app = createApp();
+    const app = createApp({ scraperConfig: { chromeEnabled: false, edgeEnabled: false, operaEnabled: false } });
     const response = await requestApi(app, '/api/analyze', {
       method: 'POST',
       headers: {
@@ -683,7 +683,7 @@ describe('backend app', () => {
     }));
     globalThis.fetch = fetchSpy as typeof fetch;
 
-    const app = createApp();
+    const app = createApp({ scraperConfig: { chromeEnabled: false, edgeEnabled: false, operaEnabled: false } });
     const response = await requestApi(app, '/api/analyze', {
       method: 'POST',
       headers: {

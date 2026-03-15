@@ -13,7 +13,7 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*", "/health"]
 
-# Service binding — connects to the backend Worker internally,
+# Service binding - connects to the backend Worker internally,
 # no public network hop.  The binding name BACKEND must match
 # the variable used in worker.ts.
 [[services]]

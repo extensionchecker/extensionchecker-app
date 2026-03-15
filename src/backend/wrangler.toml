@@ -3,7 +3,7 @@ name = "extensionchecker-backend"
 main = "src/worker.ts"
 compatibility_date = "2026-03-11"
 
-# No public route — reachable only via the frontend Worker's service binding.
+# No public route - reachable only via the frontend Worker's service binding.
 # To expose a public API, add:
 # routes = [{ pattern = "api.yourdomain.com", custom_domain = true }]
 
@@ -17,7 +17,7 @@ enabled = true
 # For local development with Miniflare/wrangler dev, add a preview_id too:
 #   wrangler kv namespace create STORE_METADATA_CACHE --preview
 #
-# The binding is optional — omitting it disables caching without breaking
+# The binding is optional - omitting it disables caching without breaking
 # anything. The app falls back gracefully to manifest-only scoring.
 #
 # [[kv_namespaces]]
@@ -27,8 +27,8 @@ enabled = true
 
 # Cron Trigger for scheduled KV cache cleanup (belt-and-suspenders alongside
 # the per-entry TTL that Cloudflare enforces automatically).
-# Runs daily at 03:00 UTC. Only takes effect in production — local dev ignores it.
-[[triggers]]
+# Runs daily at 03:00 UTC. Only takes effect in production - local dev ignores it.
+[triggers]
 crons = ["0 3 * * *"]
 
 [vars]
@@ -37,7 +37,7 @@ crons = ["0 3 * * *"]
 # is exposed publicly at its own domain.
 # API_ALLOWED_ORIGINS = ""
 
-# Shared secret for API requests — callers must send
+# Shared secret for API requests - callers must send
 # x-extensionchecker-token header.  Set as an ENCRYPTED SECRET in the
 # Cloudflare dashboard, never in plaintext here.
 # → wrangler secret put API_ACCESS_TOKEN
@@ -45,7 +45,7 @@ crons = ["0 3 * * *"]
 # Set true only for trusted server-to-server environments.
 API_ALLOW_REQUESTS_WITHOUT_ORIGIN = "false"
 
-# Rate-limit defaults — conservative, tune per deployment.
+# Rate-limit defaults - conservative, tune per deployment.
 API_RATE_LIMIT_PER_MINUTE_PER_IP = "30"
 API_RATE_LIMIT_PER_DAY_PER_IP = "2000"
 API_RATE_LIMIT_GLOBAL_PER_DAY = "90000"

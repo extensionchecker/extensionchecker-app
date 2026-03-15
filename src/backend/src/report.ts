@@ -126,7 +126,7 @@ export function buildReportFromManifest(
   let storeDataCachedAt: string | undefined;
 
   if (!storeResult.attempted) {
-    // File upload, Safari, or scraper explicitly disabled — no store context.
+    // File upload, Safari, or scraper explicitly disabled - no store context.
     overallScore = permissionsScore;
     scoringBasis = 'manifest-only';
   } else if (storeResult.data !== null && storeTrustScore !== null) {

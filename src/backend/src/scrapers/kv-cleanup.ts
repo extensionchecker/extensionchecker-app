@@ -1,5 +1,5 @@
 /**
- * Scheduled KV cache cleanup — runs via a Cloudflare Cron Trigger.
+ * Scheduled KV cache cleanup - runs via a Cloudflare Cron Trigger.
  *
  * Why this exists even though we set expirationTtl on every write:
  *  - Belt-and-suspenders: any entry written without a TTL (manual admin inserts,
@@ -29,7 +29,7 @@ type KvListResult = {
 };
 
 /**
- * Minimal KV namespace type needed for cleanup — same as in kv-cache.ts but
+ * Minimal KV namespace type needed for cleanup - same as in kv-cache.ts but
  * extended with `list` and `delete` (only needed in the scheduled handler).
  */
 export type CleanupKvNamespace = {
@@ -72,7 +72,7 @@ export async function pruneExpiredCacheEntries(
         ...(cursor ? { cursor } : {})
       });
     } catch {
-      // If listing fails, stop — don't risk partial deletion.
+      // If listing fails, stop - don't risk partial deletion.
       console.error('[kv-cleanup] Failed to list KV keys; aborting cleanup run.');
       break;
     }
@@ -82,7 +82,7 @@ export async function pruneExpiredCacheEntries(
       try {
         const raw = await kv.get(name);
         if (!raw) {
-          // Entry already expired/deleted by CF TTL — nothing to do.
+          // Entry already expired/deleted by CF TTL - nothing to do.
           continue;
         }
 
@@ -90,7 +90,7 @@ export async function pruneExpiredCacheEntries(
         try {
           entry = JSON.parse(raw) as { scrapedAt?: string };
         } catch {
-          // Malformed entry — delete it.
+          // Malformed entry - delete it.
           await kv.delete(name);
           deleted++;
           continue;
@@ -98,7 +98,7 @@ export async function pruneExpiredCacheEntries(
 
         const scrapedAtMs = entry.scrapedAt ? Date.parse(entry.scrapedAt) : NaN;
         if (!Number.isFinite(scrapedAtMs)) {
-          // No valid timestamp — delete.
+          // No valid timestamp - delete.
           await kv.delete(name);
           deleted++;
           continue;

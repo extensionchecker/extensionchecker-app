@@ -35,7 +35,7 @@ function buildZipWithFilename(filename: string, content: string): Uint8Array {
   const lhView = new DataView(localHeader.buffer);
   lhView.setUint32(0, 0x04034b50, false);   // signature (big-endian for readability, but ZIP is LE)
   // Redo as LE
-  lhView.setUint32(0, 0x04034b50 >>> 0, true);  // PK\x03\x04 — actually we write bytes directly
+  lhView.setUint32(0, 0x04034b50 >>> 0, true);  // PK\x03\x04 - actually we write bytes directly
   // Let's just use a simple approach: write the bytes manually
   const lh = new Uint8Array(30 + fnLen + dataLen);
   // PK local file header signature
@@ -52,7 +52,7 @@ function buildZipWithFilename(filename: string, content: string): Uint8Array {
   lh[14] = 0; lh[15] = 0; lh[16] = 0; lh[17] = 0;
   // compressed size (LE)
   lh[18] = dataLen & 0xff; lh[19] = (dataLen >> 8) & 0xff; lh[20] = (dataLen >> 16) & 0xff; lh[21] = (dataLen >> 24) & 0xff;
-  // uncompressed size (LE) — same as compressed for stored
+  // uncompressed size (LE) - same as compressed for stored
   lh[22] = dataLen & 0xff; lh[23] = (dataLen >> 8) & 0xff; lh[24] = (dataLen >> 16) & 0xff; lh[25] = (dataLen >> 24) & 0xff;
   // file name length (LE)
   lh[26] = fnLen & 0xff; lh[27] = (fnLen >> 8) & 0xff;

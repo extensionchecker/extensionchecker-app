@@ -39,7 +39,7 @@ export function drawVerdictCard(
 
   drawRoundedCard(doc, margin, y, contentWidth, verdictCardHeight, verdictStyle.fill, verdictStyle.border);
 
-  // Trust score circle — uses inverted colour scale: green = high trust.
+  // Trust score circle - uses inverted colour scale: green = high trust.
   const trustScore = overallTrustScore(report);
   const scoreX = margin + 50;
   const scoreY = y + 70;
@@ -103,7 +103,7 @@ export function drawVerdictCard(
     doc.text('* Store data: Firefox Add-ons only \u2014 Chrome, Edge & Opera have no public API', scoreX, signalRowY + 10, { align: 'center' });
   }
 
-  // Verdict text — label and score come from the shared utility functions.
+  // Verdict text - label and score come from the shared utility functions.
   const verdictTextX = margin + 95;
   const verdictTextW = contentWidth - 250;
 
@@ -127,7 +127,7 @@ export function drawVerdictCard(
   const summaryLines = splitAndClamp(doc, report.summary, verdictTextW, 4);
   doc.text(summaryLines, verdictTextX, y + 84, { lineHeightFactor: 1.15 });
 
-  // Trust signal explanation (e.g. "5.0★ but only 12 users — …").
+  // Trust signal explanation (e.g. "5.0★ but only 12 users - …").
   if (signalNoteLines.length > 0) {
     const signalNoteY = y + 84 + summaryLines.length * 11 + 8;
     doc.setFontSize(9.5);

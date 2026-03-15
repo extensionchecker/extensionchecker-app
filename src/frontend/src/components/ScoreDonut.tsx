@@ -4,8 +4,8 @@
  * Optionally shows a label below the ring (used for the mini donuts in
  * the composite score layout).
  *
- * variant='capability' (default) — red=high, green=low (access footprint).
- * variant='trust'                — green=high, red=low (store trust signal).
+ * variant='capability' (default) - red=high, green=low (access footprint).
+ * variant='trust'                - green=high, red=low (store trust signal).
  */
 
 import { scoreColor, scoreBand, trustScoreColor, trustScoreBand } from '../utils/formatting';

@@ -44,7 +44,7 @@ export default {
   },
 
   /**
-   * Scheduled Cron Trigger handler — prunes KV cache entries that have
+   * Scheduled Cron Trigger handler - prunes KV cache entries that have
    * exceeded MAX_CACHE_AGE_MS. Cloudflare evicts entries after their KV TTL,
    * but this handles belt-and-suspenders cleanup and policy change roll-overs.
    *
@@ -54,7 +54,7 @@ export default {
    */
   async scheduled(_event: ScheduledEvent, env: WorkerEnv, ctx: ExecutionContext) {
     if (!env.STORE_METADATA_CACHE) {
-      console.log('[kv-cleanup] No KV binding — skipping scheduled cleanup.');
+      console.log('[kv-cleanup] No KV binding - skipping scheduled cleanup.');
       return;
     }
     ctx.waitUntil(pruneExpiredCacheEntries(env.STORE_METADATA_CACHE));

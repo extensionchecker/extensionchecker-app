@@ -58,7 +58,7 @@ privacy policy applies only to the public instance at
 
 The public deployment uses:
 
-- **Cloudflare** — for hosting, CDN, and Workers runtime. Cloudflare's privacy
+- **Cloudflare** - for hosting, CDN, and Workers runtime. Cloudflare's privacy
   policy applies to infrastructure-level data handling.
 
 ## Changes

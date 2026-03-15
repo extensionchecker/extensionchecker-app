@@ -10,7 +10,7 @@ export interface MarkdownPageProps {
 }
 
 export function MarkdownPage({ markdown, onBack }: MarkdownPageProps) {
-  // Markdown source is inlined at build time from docs/*.md — trusted content.
+  // Markdown source is inlined at build time from docs/*.md - trusted content.
   const html = useMemo(() => md.parse(markdown, { async: false }) as string, [markdown]);
 
   return (

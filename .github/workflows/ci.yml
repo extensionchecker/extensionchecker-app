@@ -12,7 +12,7 @@
 #   - workflow_dispatch:  full pipeline
 
 name: CI/CD
-run-name: "CI/CD — ${{ github.event_name == 'schedule' && 'weekly security scan' || github.event_name == 'push' && github.ref_name || github.head_ref || 'manual' }}"
+run-name: "CI/CD - ${{ github.event_name == 'schedule' && 'weekly security scan' || github.event_name == 'push' && github.ref_name || github.head_ref || 'manual' }}"
 
 on:
   push:

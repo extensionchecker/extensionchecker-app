@@ -209,7 +209,7 @@ This project exists in the security space, so it must be developed with appropri
 
 ### Archive Handling Design
 
-Extension archives must never be fully decompressed into memory. The backend must use selective decompression — only the files required for analysis (`manifest.json` and locale files) should be inflated. All other archive entries should be inspected at the ZIP central-directory level but discarded without decompression. This approach keeps per-request memory usage proportional to the compressed package size rather than the total uncompressed size, which is critical for large extensions running inside Cloudflare Workers.
+Extension archives must never be fully decompressed into memory. The backend must use selective decompression - only the files required for analysis (`manifest.json` and locale files) should be inflated. All other archive entries should be inspected at the ZIP central-directory level but discarded without decompression. This approach keeps per-request memory usage proportional to the compressed package size rather than the total uncompressed size, which is critical for large extensions running inside Cloudflare Workers.
 
 Before any decompression is attempted, every archive must be validated against the following checks. Any failure must result in a clear error response to the user rather than a silent failure or a resource-limit termination:
 

@@ -1,5 +1,5 @@
 /**
- * Scoring configuration — tune this file to adjust how the composite
+ * Scoring configuration - tune this file to adjust how the composite
  * access score is computed from manifest permissions and store trust signals.
  *
  * PERMISSION_WEIGHTS (the per-permission additive scores that build the raw
@@ -41,12 +41,12 @@ export const TRUST_COMPONENT_WEIGHTS = {
  *   trustModifier = (100 − storeTrustScore) / 100   [0 = full trust, 1 = no trust]
  *   composite     = permissionsScore × (FLOOR + WEIGHT × trustModifier)
  *
- * FLOOR  — minimum multiplier at perfect trust (storeTrustScore = 100).
+ * FLOOR  - minimum multiplier at perfect trust (storeTrustScore = 100).
  *          Keeps the capability footprint visible even for maximally trusted extensions.
  *          A floor of 0.08 means a permission-heavy extension with perfect store signals
  *          still contributes 8% of its raw score to the overall result.
  *
- * WEIGHT — how strongly store trust can pull the composite score down.
+ * WEIGHT - how strongly store trust can pull the composite score down.
  *          FLOOR + WEIGHT should be ≈ 1.0 so that zero-trust extensions score at or
  *          near their full raw permissions score.
  *

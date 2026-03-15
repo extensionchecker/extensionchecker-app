@@ -36,7 +36,7 @@ export function AnalysisSignals({ report }: AnalysisSignalsProps) {
   const hasCode = report.limits.codeExecutionAnalysisPerformed;
 
   // Always label the store chip "Store" regardless of which store provided the
-  // data — the Submission Source card already identifies the specific store.
+  // data - the Submission Source card already identifies the specific store.
   const storeChipLabel = 'Store';
 
   return (
@@ -46,7 +46,7 @@ export function AnalysisSignals({ report }: AnalysisSignalsProps) {
       <SignalChip icon={hasCode ? 'check_circle' : 'cancel'} label="Code" active={hasCode} />
       {!hasStore && (
         <p className="analysis-signals-note">
-          * Firefox Add-ons only — Chrome, Edge &amp; Opera have no public API
+          * Firefox Add-ons only - Chrome, Edge &amp; Opera have no public API
         </p>
       )}
     </div>

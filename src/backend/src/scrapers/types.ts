@@ -1,7 +1,7 @@
 /**
  * Shared types used by all browser extension store scrapers.
  *
- * All fields are optional — individual scrapers may only be able to recover
+ * All fields are optional - individual scrapers may only be able to recover
  * a subset of signals depending on what the store page exposes, and partial
  * data is still useful for trust scoring.
  */

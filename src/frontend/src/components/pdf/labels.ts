@@ -74,13 +74,13 @@ export function scoreColor(score: number): RGB {
 }
 
 /**
- * Inverted colour scale for trust scores — mirrors trustScoreColor() from
+ * Inverted colour scale for trust scores - mirrors trustScoreColor() from
  * formatting.ts but returns RGB tuples for jsPDF.
  * High trust (near 100) = green; low trust (near 0) = red.
  */
 export function trustScoreColorRgb(score: number): RGB {
   if (score <= 20) {
-    return [239, 68, 68]; // red — low trust
+    return [239, 68, 68]; // red - low trust
   }
 
   if (score <= 40) {
@@ -95,7 +95,7 @@ export function trustScoreColorRgb(score: number): RGB {
     return [132, 204, 22]; // lime green
   }
 
-  return [34, 197, 94]; // green — high trust
+  return [34, 197, 94]; // green - high trust
 }
 
 export function statusColor(status: 'Complete' | 'Not Available'): { fill: RGB; text: RGB } {

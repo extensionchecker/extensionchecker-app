@@ -1,5 +1,5 @@
 /**
- * Unified store data dispatch — routes to the correct fetcher based on
+ * Unified store data dispatch - routes to the correct fetcher based on
  * the extension ecosystem, respects per-store feature flags, and uses a
  * KV-backed cache to survive scraper failures gracefully.
  *
@@ -56,12 +56,12 @@ async function scrapeWithCacheFallback(
   const freshData = await scraperFn(id, fetchImpl, timeoutMs);
 
   if (freshData !== null) {
-    // Scrape succeeded — update cache and return fresh data.
+    // Scrape succeeded - update cache and return fresh data.
     await writeToCache(kv, ecosystem, id, freshData);
     return { attempted: true, data: freshData, fromCache: false };
   }
 
-  // 2. Scrape failed — check for a cached fallback.
+  // 2. Scrape failed - check for a cached fallback.
   const cached = await readFromCache(kv, ecosystem, id);
   if (cached.hit) {
     return {
@@ -87,7 +87,7 @@ async function scrapeWithCacheFallback(
  * @param timeoutMs    Max milliseconds before the fetch is aborted.
  * @param config       Per-store enable/disable flags.
  * @param kv           Optional KV namespace for caching. When absent, no cache
- *                     is used — scrape failures produce "unavailable" immediately.
+ *                     is used - scrape failures produce "unavailable" immediately.
  */
 export async function dispatchStoreDataFetch(
   sourceValue: string,
@@ -103,7 +103,7 @@ export async function dispatchStoreDataFetch(
 
   switch (ecosystem) {
     case 'firefox': {
-      // AMO has a public REST API — always attempt, use same cache layer.
+      // AMO has a public REST API - always attempt, use same cache layer.
       return scrapeWithCacheFallback(
         'firefox', id,
         (addonId, fi, tms) => fetchAmoStoreData(addonId, fi, tms),

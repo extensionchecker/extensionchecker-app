@@ -63,7 +63,7 @@ export function computeStoreTrustScore(
     return Math.round(blended);
   }
 
-  // Only one signal — use it at full weight.
+  // Only one signal - use it at full weight.
   return Math.round(hasRating ? ratingScore : downloadScore);
 }
 
@@ -74,9 +74,9 @@ export function computeStoreTrustScore(
  *   trustModifier = (100 − storeTrustScore) / 100   (0 = full trust, 1 = no trust)
  *   composite     = permissionsScore × (FLOOR + WEIGHT × trustModifier)
  *
- * FLOOR  — minimum multiplier even at perfect trust (from scoring-config.ts).
+ * FLOOR  - minimum multiplier even at perfect trust (from scoring-config.ts).
  *          Keeps the capability footprint visible for even the most trusted extensions.
- * WEIGHT — how strongly store trust can pull the composite score down.
+ * WEIGHT - how strongly store trust can pull the composite score down.
  *
  * See scoring-config.ts for the full example table and tuning guidance.
  */

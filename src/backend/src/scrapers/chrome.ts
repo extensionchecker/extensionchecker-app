@@ -8,7 +8,7 @@
  *  3. Extract user/install count via a JSON-LD interactionStatistic or
  *     page-text regex patterns as a fallback.
  *
- * Failure is non-fatal — null is returned for any network, parse, or
+ * Failure is non-fatal - null is returned for any network, parse, or
  * structure error so the caller can fall back to manifest-only scoring.
  */
 
@@ -18,7 +18,7 @@ import type { ScrapedStoreData } from './types';
 const CHROME_STORE_BASE = 'https://chromewebstore.google.com/detail/';
 const SCRAPE_TIMEOUT_MS = 8_000;
 
-// A browser-like UA is required — Google returns a stripped page for bots.
+// A browser-like UA is required - Google returns a stripped page for bots.
 const SCRAPE_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -154,7 +154,7 @@ export async function fetchChromeStoreData(
 
   const userCount = extractUserCountFromHtml(html);
 
-  // Return null rather than an empty object — partial data with at least one
+  // Return null rather than an empty object - partial data with at least one
   // signal is useful; a completely empty result is not.
   if (rating === undefined && userCount === undefined) return null;
 

@@ -56,7 +56,7 @@ to the backend on `http://localhost:8787`.
 
 - **TypeScript** throughout. Strict typing, explicit interfaces, no `any`.
 - Small, well-named modules. Prefer pure functions where practical.
-- Follow the existing code style — the project uses consistent formatting
+- Follow the existing code style - the project uses consistent formatting
   conventions already in place.
 - See [docs/STYLE_GUIDE.md](docs/STYLE_GUIDE.md) for detailed guidelines.
 

@@ -34,7 +34,7 @@ graph LR
 
 In production, the entire stack runs on Cloudflare. The **Frontend Worker**
 is the only component with a public route. The Backend Worker has no public
-URL — it is reachable only via a Cloudflare **service binding** (an internal,
+URL - it is reachable only via a Cloudflare **service binding** (an internal,
 zero-latency call that never traverses the public internet).
 
 ```mermaid
@@ -139,8 +139,8 @@ graph LR
 The Frontend Worker is the **only publicly routable** component. It has two
 jobs:
 
-1. **Serve static assets** — the built React SPA, CSS, JS, and images.
-2. **Proxy API requests** — intercept `/api/*` and `/health`, inject the
+1. **Serve static assets** - the built React SPA, CSS, JS, and images.
+2. **Proxy API requests** - intercept `/api/*` and `/health`, inject the
    `x-extensionchecker-token` header from its own secret store, and forward
    to the Backend Worker via service binding.
 
@@ -150,23 +150,23 @@ The browser never sees or handles the API access token.
 
 The Backend Worker handles all business logic:
 
-- **CORS & origin enforcement** — validates `Origin` header against an
+- **CORS & origin enforcement** - validates `Origin` header against an
   allowlist.
-- **Token authentication** — optional shared-secret check via
+- **Token authentication** - optional shared-secret check via
   `x-extensionchecker-token`.
-- **Rate limiting** — in-memory per-IP and global rate limiter with
+- **Rate limiting** - in-memory per-IP and global rate limiter with
   per-minute and per-day windows.
-- **Input validation** — Zod schemas for all request bodies.
-- **URL safety** — SSRF protection: HTTPS-only, private IP rejection,
+- **Input validation** - Zod schemas for all request bodies.
+- **URL safety** - SSRF protection: HTTPS-only, private IP rejection,
   host allowlist.
-- **ID resolution** — maps extension IDs to download URL candidates per
+- **ID resolution** - maps extension IDs to download URL candidates per
   ecosystem.
-- **Package download** — fetches extension packages from allowlisted store
+- **Package download** - fetches extension packages from allowlisted store
   hosts with timeout and size limits.
-- **Archive extraction** — selective ZIP decompression (only `manifest.json`
+- **Archive extraction** - selective ZIP decompression (only `manifest.json`
   and `_locales/`) with zip bomb, path traversal, and decompression bomb
   defenses.
-- **Analysis** — delegates to the engine for manifest analysis and risk
+- **Analysis** - delegates to the engine for manifest analysis and risk
   scoring.
 
 ### Analysis Engine
@@ -185,8 +185,8 @@ manifest object and returns a structured risk report. Responsibilities:
 
 Type definitions and Zod schemas shared across all packages:
 
-- `AnalysisReport` — the complete report returned to the frontend.
-- `RiskSignal`, `PermissionDetail`, `ManifestMetadata` — sub-schemas.
+- `AnalysisReport` - the complete report returned to the frontend.
+- `RiskSignal`, `PermissionDetail`, `ManifestMetadata` - sub-schemas.
 - Constants for severity levels, permission categories, etc.
 
 ## Technology Stack

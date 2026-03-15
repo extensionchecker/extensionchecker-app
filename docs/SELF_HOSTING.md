@@ -52,7 +52,7 @@ backend on `http://localhost:8787`.
 ## 4. Configure Your Domains
 
 Edit the two `wrangler.toml` files to replace the official domains with your
-own. No application code changes are needed — the app uses only relative API
+own. No application code changes are needed - the app uses only relative API
 paths.
 
 ### Backend (`src/backend/wrangler.toml`)
@@ -63,7 +63,7 @@ Change the `name` field at the top of the file:
 name = "your-app-backend"
 ```
 
-The backend has no public route by default — the frontend reaches it via
+The backend has no public route by default - the frontend reaches it via
 a service binding. To expose a public API, add a `routes` line:
 
 ```toml
@@ -87,7 +87,7 @@ binding = "BACKEND"
 service = "your-app-backend"
 ```
 
-The service binding name (`BACKEND`) must match exactly — it connects the
+The service binding name (`BACKEND`) must match exactly - it connects the
 frontend Worker to the backend Worker internally without a public network hop.
 
 > **No custom domain?** You can skip the `routes` lines entirely and use the
@@ -109,7 +109,7 @@ cd src/backend
 npx wrangler deploy
 ```
 
-Note the URL that Wrangler prints — you'll need it if you're using
+Note the URL that Wrangler prints - you'll need it if you're using
 `*.workers.dev` URLs instead of custom domains.
 
 ## 7. Deploy the Frontend
@@ -191,7 +191,7 @@ you are free to:
 - Distribute modified versions
 
 The only requirement is that you **retain the original copyright notice and
-license text** in your copy. This is already in the `LICENSE` file — just
+license text** in your copy. This is already in the `LICENSE` file - just
 don't remove it.
 
 You are **not** required to:
@@ -204,7 +204,7 @@ You are **not** required to:
 
 The backend enforces the following limits on extension archives. These are
 designed to protect the Cloudflare Worker runtime, not to restrict legitimate
-extensions — real-world extensions rarely approach these ceilings.
+extensions - real-world extensions rarely approach these ceilings.
 
 | Limit | Value | Notes |
 |-------|-------|-------|
@@ -218,7 +218,7 @@ and `_locales/**` locale files are ever inflated into memory. The rest of the
 extension archive (JavaScript bundles, icons, filter lists, etc.) is read at
 the ZIP metadata level and discarded. This means even a large extension whose
 total uncompressed content is 50 MB or more can be analyzed with minimal
-memory — the Worker only allocates memory for the compressed archive bytes
+memory - the Worker only allocates memory for the compressed archive bytes
 plus the small files it actually needs.
 
 If you are self-hosting and need to analyze unusually large extensions

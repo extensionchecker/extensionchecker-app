@@ -102,7 +102,7 @@ describe('App results flows', () => {
     render(<App />);
 
     // Value exceeds MAX_QUERY_PARAM_VALUE_LENGTH so both the auto-submit guard and the
-    // rescanValue memo reject it — the generic "No Report Loaded" state must be shown
+    // rescanValue memo reject it - the generic "No Report Loaded" state must be shown
     expect(screen.getByText('No Report Loaded')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Re-scan Extension' })).not.toBeInTheDocument();
   });

@@ -16,7 +16,7 @@
 
 import type { ScrapedStoreData } from './types';
 
-/** Version tag — increment to invalidate all existing cache entries. */
+/** Version tag - increment to invalidate all existing cache entries. */
 const CACHE_KEY_VERSION = 'v1';
 
 /** Duration in ms after which cache is used with a display note. */
@@ -25,7 +25,7 @@ export const FRESH_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1_000; // 7 days
 /** Maximum age in ms before a cache entry is considered too stale to use. */
 export const MAX_CACHE_AGE_MS = 90 * 24 * 60 * 60 * 1_000; // 90 days
 
-/** KV entry TTL — slightly longer than max age so CF doesn't evict before we do. */
+/** KV entry TTL - slightly longer than max age so CF doesn't evict before we do. */
 const KV_TTL_SECONDS = 100 * 24 * 60 * 60; // 100 days
 
 type CacheEntry = {
@@ -39,7 +39,7 @@ type CacheReadResult =
 
 /**
  * Minimal interface that covers both real Cloudflare KV namespaces and
- * test doubles — avoids importing Cloudflare-specific types into tests.
+ * test doubles - avoids importing Cloudflare-specific types into tests.
  */
 export type KvNamespace = {
   get(key: string): Promise<string | null>;
@@ -65,7 +65,7 @@ export async function readFromCache(
   try {
     raw = await kv.get(key);
   } catch {
-    // KV errors are non-fatal — treat as a miss.
+    // KV errors are non-fatal - treat as a miss.
     return { hit: false };
   }
 
@@ -74,7 +74,7 @@ export async function readFromCache(
   let entry: CacheEntry;
   try {
     entry = JSON.parse(raw) as CacheEntry;
-    if (!entry.scrapedAt || typeof entry.data !== 'object') return { hit: false };
+    if (!entry.scrapedAt || entry.data === null || typeof entry.data !== 'object') return { hit: false };
   } catch {
     return { hit: false };
   }

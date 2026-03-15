@@ -2,7 +2,7 @@
  * Feature-flag configuration for per-store HTML scrapers.
  *
  * Each scraper can be independently disabled via environment variable.
- * Defaults to enabled — set to "false", "0", or "no" to disable a store.
+ * Defaults to enabled - set to "false", "0", or "no" to disable a store.
  *
  * Why you might disable a scraper:
  *  - The store has changed its page structure and the scraper is returning garbage.

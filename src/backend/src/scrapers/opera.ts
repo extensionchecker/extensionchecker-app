@@ -3,14 +3,14 @@
  *
  * Strategy:
  *  The Opera Add-ons site is a server-rendered Django application. We extract:
- *   1. Star rating — from schema.org microdata itemprop attributes, or JSON-LD,
+ *   1. Star rating - from schema.org microdata itemprop attributes, or JSON-LD,
  *      or heuristic regex patterns in the page text.
- *   2. Download / user count — from visible page text or meta tags.
+ *   2. Download / user count - from visible page text or meta tags.
  *
- *  Opera Add-ons pages are relatively HTML-stable, but the format is sparse —
+ *  Opera Add-ons pages are relatively HTML-stable, but the format is sparse -
  *  not all extensions have ratings, and download counts may not be present.
  *
- * Failure is non-fatal — null is returned for any network, parse, or
+ * Failure is non-fatal - null is returned for any network, parse, or
  * structure error so the caller can fall back to manifest-only scoring.
  */
 

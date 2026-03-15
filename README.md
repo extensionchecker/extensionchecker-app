@@ -15,13 +15,13 @@
 
 Submit a Chrome, Firefox, or Safari extension by store URL, extension ID, or
 uploaded package file and get a clear, structured, human-readable risk report.
-No opaque trust scores — every finding is traceable to evidence in the
+No opaque trust scores - every finding is traceable to evidence in the
 extension's manifest and code.
 
 <img src="docs/logo/icon.png" alt="ExtensionChecker logo" width="100" />
 
 > **Live instance**: [app.extensionchecker.org](https://app.extensionchecker.org)
-> — running on the Cloudflare Workers free tier. If you need higher throughput
+> - running on the Cloudflare Workers free tier. If you need higher throughput
 > or want full control, [self-host your own instance](docs/SELF_HOSTING.md).
 
 ---
@@ -62,7 +62,7 @@ own instance.
 |----------|-------------|
 | [Self-Hosting Guide](docs/SELF_HOSTING.md) | End-to-end walkthrough: fork, configure, deploy |
 | [Deployment Reference](docs/DEPLOYMENT.md) | Domains, environment variables, service bindings |
-| [License](LICENSE) | MIT — what you can and cannot do |
+| [License](LICENSE) | MIT - what you can and cannot do |
 
 ---
 
@@ -77,13 +77,13 @@ src/
 ```
 
 The frontend proxies `/api/*` to the backend via a Cloudflare service binding
-in production, or Vite's dev proxy locally. The engine runs in-process — it is
+in production, or Vite's dev proxy locally. The engine runs in-process - it is
 imported by the backend, not called over the network.
 
 ### Package processing
 
 Extension archives (`.crx`, `.xpi`, `.zip`) are held entirely in memory for
-the duration of a request — Cloudflare Workers have no filesystem. The backend
+the duration of a request - Cloudflare Workers have no filesystem. The backend
 uses selective decompression: only `manifest.json` and `_locales/**` locale
 files are inflated. Everything else in the archive (filter lists, JavaScript
 bundles, icons, etc.) is read at the ZIP central-directory level but never
@@ -109,6 +109,6 @@ safety checks designed to reject adversarial inputs:
 
 ## License
 
-[MIT](LICENSE) — free to use, modify, and self-host. See
+[MIT](LICENSE) - free to use, modify, and self-host. See
 [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) for what that means in practice.
 

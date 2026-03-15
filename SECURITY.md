@@ -41,5 +41,5 @@ disclosure process.
 ## Scope
 
 This policy covers the ExtensionChecker application code in this repository.
-It does not cover third-party dependencies — please report those to their
+It does not cover third-party dependencies - please report those to their
 respective maintainers.

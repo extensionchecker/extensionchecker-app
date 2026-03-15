@@ -54,7 +54,7 @@ graph TB
 | TB2 | Cloudflare Edge → Frontend Worker | **Platform → App** | TLS-terminated requests, Cloudflare-injected headers (`cf-connecting-ip`) |
 | TB3 | Frontend Worker → Backend Worker | **App → App (elevated)** | Proxied API requests with injected auth token |
 | TB4 | Backend Worker → External Stores | **App → Third-party** | HTTPS fetches for extension packages; response content is **untrusted** |
-| TB5 | External Package → Archive Extractor | **Untrusted content → Parser** | ZIP archive bytes — most critical attack surface |
+| TB5 | External Package → Archive Extractor | **Untrusted content → Parser** | ZIP archive bytes - most critical attack surface |
 
 ---
 
@@ -74,7 +74,7 @@ sequenceDiagram
     User->>Browser: Enter store URL
     Browser->>FW: POST /api/analyze<br/>{"source":{"type":"url","value":"https://..."}}
 
-    Note over FW: TB3 — Inject x-extensionchecker-token
+    Note over FW: TB3 - Inject x-extensionchecker-token
 
     FW->>BW: Forward request + auth token
 
@@ -95,12 +95,12 @@ sequenceDiagram
 
     loop Try each download candidate
         BW->>Store: GET download URL
-        Note over BW,Store: TB4 — Crosses into third-party trust
+        Note over BW,Store: TB4 - Crosses into third-party trust
         Store-->>BW: Extension package bytes (or error)
     end
 
     Note over BW: Enforce size limit (≤ 80 MB)
-    Note over BW: TB5 — Parse untrusted archive
+    Note over BW: TB5 - Parse untrusted archive
 
     BW->>BW: extractManifestFromPackage(bytes)
     Note over BW: ZIP validation:<br/>• ≤ 5,000 entries<br/>• No null bytes in names<br/>• No path traversal (../ or /)<br/>• Compression ratio ≤ 1000:1<br/>• Per-file ≤ 5 MB<br/>• Selective decompression only
@@ -319,9 +319,9 @@ flowchart TD
 
 | Data | At Rest | In Transit | Retention |
 |------|---------|-----------|-----------|
-| Uploaded extension packages | **Never persisted** — processed in Worker memory only | HTTPS (user → CF edge → Worker) | Discarded after response |
-| Downloaded extension packages | **Never persisted** — held in memory during analysis | HTTPS (store → Worker) | Discarded after response |
-| Analysis reports | **Not stored** (v0.1.0) — returned in HTTP response | HTTPS (Worker → CF edge → user) | None server-side; client may save |
+| Uploaded extension packages | **Never persisted** - processed in Worker memory only | HTTPS (user → CF edge → Worker) | Discarded after response |
+| Downloaded extension packages | **Never persisted** - held in memory during analysis | HTTPS (store → Worker) | Discarded after response |
+| Analysis reports | **Not stored** (v0.1.0) - returned in HTTP response | HTTPS (Worker → CF edge → user) | None server-side; client may save |
 | API access token | Cloudflare encrypted secret store | Injected in internal service binding header | Persistent (until rotated) |
 | Rate limit counters | Worker in-memory (per isolate) | N/A | Reset on Worker restart |
 | User theme preference | Browser localStorage | Never transmitted | Until user clears storage |

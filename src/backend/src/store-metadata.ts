@@ -38,7 +38,7 @@ export async function fetchAmoStoreData(
     return null;
   }
 
-  // Encode addon ID to prevent path injection — AMO slugs and IDs are safe
+  // Encode addon ID to prevent path injection - AMO slugs and IDs are safe
   // alphanumeric/hyphen strings, but we encode defensively regardless.
   const encodedId = encodeURIComponent(addonId);
   const apiUrl = `${AMO_API_BASE}${encodedId}/`;

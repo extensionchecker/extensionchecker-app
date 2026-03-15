@@ -35,13 +35,13 @@ If an implementation shortcut would violate these expectations, do not take it w
 
 ## Development philosophy
 
-Write production-quality, production-ready code from the start — every time, without exception. This is a security product. Half-measures, placeholder code, and "we'll clean it up later" thinking are not acceptable here. Code that contributors cannot trust is code that users cannot trust.
+Write production-quality, production-ready code from the start - every time, without exception. This is a security product. Half-measures, placeholder code, and "we'll clean it up later" thinking are not acceptable here. Code that contributors cannot trust is code that users cannot trust.
 
-**Never write monoliths.** Every file must have a single, clearly statable responsibility. A file that cannot be described in one sentence is doing too much. A file growing past ~250 lines of logic is a warning sign that decomposition is needed. A file past ~400 lines is almost certainly a monolith — do not add new functionality to it; decompose it first, then add. This rule applies to React components, route handlers, utility modules, engine files, and everything else. No exceptions for expediency.
+**Never write monoliths.** Every file must have a single, clearly statable responsibility. A file that cannot be described in one sentence is doing too much. A file growing past ~250 lines of logic is a warning sign that decomposition is needed. A file past ~400 lines is almost certainly a monolith - do not add new functionality to it; decompose it first, then add. This rule applies to React components, route handlers, utility modules, engine files, and everything else. No exceptions for expediency.
 
-**Actively find and eliminate technical debt.** "Don't create tech debt" is a floor, not a ceiling. When you encounter an overgrown file, tangled concern, duplicated type, untested path, or unclear boundary — fix it in the current changeset, not a future ticket. Technical debt in a security tool is not just a maintenance burden; it is an attack surface.
+**Actively find and eliminate technical debt.** "Don't create tech debt" is a floor, not a ceiling. When you encounter an overgrown file, tangled concern, duplicated type, untested path, or unclear boundary - fix it in the current changeset, not a future ticket. Technical debt in a security tool is not just a maintenance burden; it is an attack surface.
 
-Favor simple, durable solutions over clever or fragile ones. Solve the actual problem stated — do not overbuild for hypothetical future needs.
+Favor simple, durable solutions over clever or fragile ones. Solve the actual problem stated - do not overbuild for hypothetical future needs.
 
 Keep all logic explainable. If a piece of logic is hard to describe in plain language, it is probably wrong or unnecessarily complex. Every risk finding produced by this tool must be traceable to concrete evidence.
 
@@ -63,7 +63,7 @@ Local development should support:
 
 Use TypeScript throughout. Use strict mode. Enable `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`. There is no acceptable reason to use `any`.
 
-**Module discipline — non-negotiable:**
+**Module discipline - non-negotiable:**
 
 - Every module has exactly one responsibility, expressible in a single sentence. If you cannot state it in one sentence, split the module.
 - A file growing past ~250 lines of logic is a decomposition warning. Stop and evaluate before continuing.
@@ -74,40 +74,40 @@ Use TypeScript throughout. Use strict mode. Enable `noUncheckedIndexedAccess` an
 **Testability as a design constraint:**
 
 - If a piece of logic is difficult to unit test in isolation, the design is wrong. Restructure until it is independently testable.
-- Avoid hidden side effects and global mutable state — they make code unpredictable and tests unreliable.
+- Avoid hidden side effects and global mutable state - they make code unpredictable and tests unreliable.
 - Pure functions are strongly preferred for all business logic: same input always produces same output, no surprises.
 
 Prefer:
 
-- strict, explicit TypeScript types — no implicit `any`, no type assertions without justification
+- strict, explicit TypeScript types - no implicit `any`, no type assertions without justification
 - small, focused modules with one clear job
 - explicit interfaces and Zod schemas at all system boundaries
-- predictable, deliberate error handling — every error path is intentional, never silent
+- predictable, deliberate error handling - every error path is intentional, never silent
 - pure functions for all analysis, scoring, and transformation logic
 - dependency injection over hidden imports for anything that needs to be tested or swapped
 
 Avoid:
 
-- monolithic files — this is a first-class defect, not a style preference
-- vague helper sprawl — if it has no clear home, create the right module for it
-- duplicate type definitions across packages — shared contracts belong in `src/shared/`
+- monolithic files - this is a first-class defect, not a style preference
+- vague helper sprawl - if it has no clear home, create the right module for it
+- duplicate type definitions across packages - shared contracts belong in `src/shared/`
 - untyped data crossing package boundaries
 - functions that mix HTTP concerns with business logic
-- magic numbers and strings — every constant must be named and explained
-- speculative abstractions — only build what is needed right now
+- magic numbers and strings - every constant must be named and explained
+- speculative abstractions - only build what is needed right now
 
 ## Testing and validation
 
-Tests are not optional and are not written after the fact. A feature is not done until it is tested. An untested code path is an unknown code path — in a security tool, unknown behavior is unacceptable.
+Tests are not optional and are not written after the fact. A feature is not done until it is tested. An untested code path is an unknown code path - in a security tool, unknown behavior is unacceptable.
 
 **Required test coverage at minimum:**
 
-- manifest parsing — valid, invalid, edge cases, adversarial inputs
-- permission normalization — all known permission types and combinations
-- risk signal derivation — every scoring rule and dangerous combination
-- report schema stability — valid reports pass, invalid reports are caught
-- backend request and response behavior — success paths, error paths, size limits, malformed input, rate limiting
-- archive extraction — valid archives, zip bombs, path traversal, null bytes, oversized entries
+- manifest parsing - valid, invalid, edge cases, adversarial inputs
+- permission normalization - all known permission types and combinations
+- risk signal derivation - every scoring rule and dangerous combination
+- report schema stability - valid reports pass, invalid reports are caught
+- backend request and response behavior - success paths, error paths, size limits, malformed input, rate limiting
+- archive extraction - valid archives, zip bombs, path traversal, null bytes, oversized entries
 
 **Testing discipline:**
 
@@ -116,7 +116,7 @@ Tests are not optional and are not written after the fact. A feature is not done
 - When changing any shared contract, update and verify tests in every affected package before the work is considered done.
 - Coverage thresholds are a floor, not a goal. Trivial tests that inflate numbers without validating behavior are worse than no tests at all.
 
-**Definition of done — work is not complete until:**
+**Definition of done - work is not complete until:**
 
 1. `tsc --noEmit` passes with zero type errors across all packages
 2. All tests pass with zero failures
@@ -128,7 +128,7 @@ Tests are not optional and are not written after the fact. A feature is not done
 
 **This is a security product. Think like an attacker at all times.**
 
-Do not assume any input is safe. Extension packages from known stores, manifest JSON extracted from those packages, user-supplied URLs, extension IDs, uploaded files, HTTP headers, query parameters — all of it is potentially adversarial until validated. An attacker who controls any input is actively trying to crash the system, bypass a control, or exfiltrate data.
+Do not assume any input is safe. Extension packages from known stores, manifest JSON extracted from those packages, user-supplied URLs, extension IDs, uploaded files, HTTP headers, query parameters - all of it is potentially adversarial until validated. An attacker who controls any input is actively trying to crash the system, bypass a control, or exfiltrate data.
 
 **For every function that touches external input, ask:**
 
@@ -142,18 +142,18 @@ If you cannot confidently answer all five, the code is not ready.
 
 **Security controls by area:**
 
-- **Archive processing** — ZIP/CRX/XPI archives are the highest-risk input surface in this codebase. Entry count limits, compression ratio limits, per-file size limits, null bytes in filenames, and path traversal sequences must all be enforced before any decompression occurs. Selective decompression is not optional — only extract what the analysis actually needs.
-- **SSRF** — any URL or hostname derived from user input must be validated against a strict allowlist before a fetch is issued. Private IP ranges (`10/8`, `172.16/12`, `192.168/16`, `127/8`), localhost, `.local` domains, and cloud metadata endpoints (`169.254.169.254`) must be explicitly blocked. URL validation must happen before every fetch, not just at the API boundary.
-- **Zip bombs** — always verify compression ratios from ZIP central-directory headers before inflating any entry. Never trust the declared uncompressed size without checking the ratio.
-- **Path traversal** — reject any filename or resolved path containing `../` or beginning with `/`. This applies to archive entries, file lookups, and any path computation derived from external input.
-- **Denial of service** — size limits, entry count limits, rate limits, and fetch timeouts are security controls, not performance hints. Enforce them at the earliest possible point in the request lifecycle, before any expensive work begins.
-- **Injection** — manifest fields, locale strings, and store metadata must never be rendered as raw HTML. Never use `dangerouslySetInnerHTML` with external content. React auto-escapes interpolated values — rely on that, and avoid patterns that bypass it.
-- **Information disclosure** — error responses must never include stack traces, internal file paths, library versions, or implementation details. Generic error messages are correct; verbose ones are a vulnerability.
-- **Timing attacks** — token and secret comparisons must use constant-time comparison. Standard string equality (`===`) is not acceptable for secret validation.
+- **Archive processing** - ZIP/CRX/XPI archives are the highest-risk input surface in this codebase. Entry count limits, compression ratio limits, per-file size limits, null bytes in filenames, and path traversal sequences must all be enforced before any decompression occurs. Selective decompression is not optional - only extract what the analysis actually needs.
+- **SSRF** - any URL or hostname derived from user input must be validated against a strict allowlist before a fetch is issued. Private IP ranges (`10/8`, `172.16/12`, `192.168/16`, `127/8`), localhost, `.local` domains, and cloud metadata endpoints (`169.254.169.254`) must be explicitly blocked. URL validation must happen before every fetch, not just at the API boundary.
+- **Zip bombs** - always verify compression ratios from ZIP central-directory headers before inflating any entry. Never trust the declared uncompressed size without checking the ratio.
+- **Path traversal** - reject any filename or resolved path containing `../` or beginning with `/`. This applies to archive entries, file lookups, and any path computation derived from external input.
+- **Denial of service** - size limits, entry count limits, rate limits, and fetch timeouts are security controls, not performance hints. Enforce them at the earliest possible point in the request lifecycle, before any expensive work begins.
+- **Injection** - manifest fields, locale strings, and store metadata must never be rendered as raw HTML. Never use `dangerouslySetInnerHTML` with external content. React auto-escapes interpolated values - rely on that, and avoid patterns that bypass it.
+- **Information disclosure** - error responses must never include stack traces, internal file paths, library versions, or implementation details. Generic error messages are correct; verbose ones are a vulnerability.
+- **Timing attacks** - token and secret comparisons must use constant-time comparison. Standard string equality (`===`) is not acceptable for secret validation.
 
 Do not assume remote package retrieval will behave honestly, return what it claims, or complete in a reasonable time. File upload is a required fallback path, not a secondary convenience feature.
 
-When in doubt about whether a validation is necessary, add it. The cost of an unnecessary check is negligible. The cost of a missing one is a vulnerability in a security tool — which is the worst possible place to have one.
+When in doubt about whether a validation is necessary, add it. The cost of an unnecessary check is negligible. The cost of a missing one is a vulnerability in a security tool - which is the worst possible place to have one.
 
 ## Documentation discipline
 

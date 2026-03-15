@@ -45,7 +45,7 @@ when contributing to keep the codebase consistent and maintainable.
 - One primary export per file when practical.
 - Re-export public API from `index.ts` at each package root.
 - Keep internal helpers private (unexported) unless another package needs them.
-- Avoid circular imports — if two modules need each other, extract the shared
+- Avoid circular imports - if two modules need each other, extract the shared
   piece into a third module.
 
 ## Functions
@@ -53,7 +53,7 @@ when contributing to keep the codebase consistent and maintainable.
 - Prefer pure functions. Side effects should be explicit and isolated.
 - Keep functions short and single-purpose.
 - Use early returns to reduce nesting.
-- Avoid default exports — use named exports.
+- Avoid default exports - use named exports.
 
 ## Error Handling
 
@@ -83,7 +83,7 @@ when contributing to keep the codebase consistent and maintainable.
 
 - Write clear, imperative commit messages: "Add manifest parser" not "Added
   manifest parser".
-- Keep commits focused — one logical change per commit.
+- Keep commits focused - one logical change per commit.
 
 ## Dependencies
 

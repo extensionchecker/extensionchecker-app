@@ -15,7 +15,7 @@ Backend Worker
 
 The browser only talks to the frontend Worker. All `/api/*` and `/health`
 requests are intercepted by the frontend Worker (`worker.ts`) and forwarded
-to the backend through a Cloudflare **service binding** — a zero-latency
+to the backend through a Cloudflare **service binding** - a zero-latency
 internal call. The frontend Worker injects the `API_ACCESS_TOKEN` header so
 the backend can authenticate requests without exposing the token to browsers.
 
@@ -28,7 +28,7 @@ the backend can authenticate requests without exposing the token to browsers.
 The frontend domain is configured as a Cloudflare Worker custom domain in
 `src/frontend/wrangler.toml`. It is **not** hard-coded in application code.
 
-The backend has no public route — it is reachable only through the frontend
+The backend has no public route - it is reachable only through the frontend
 Worker's service binding. To expose a public API for external consumers,
 add a `routes` entry to `src/backend/wrangler.toml` and set
 `API_ALLOWED_ORIGINS` accordingly.
@@ -48,7 +48,7 @@ add a `routes` entry to `src/backend/wrangler.toml` and set
 - The **frontend Worker** serves static assets and proxies `/api/*` requests
   to the backend via a Cloudflare **service binding**.
 - The frontend Worker injects the `x-extensionchecker-token` header from its
-  own `API_ACCESS_TOKEN` secret before forwarding — the browser never sees
+  own `API_ACCESS_TOKEN` secret before forwarding - the browser never sees
   the token.
 
 ### Staging

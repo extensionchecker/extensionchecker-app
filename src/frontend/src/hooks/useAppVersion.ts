@@ -20,7 +20,7 @@ export function useAppVersion(): string | null {
           }
         }
       })
-      .catch(() => { /* version.txt not available — that's fine */ });
+      .catch(() => { /* version.txt not available - that's fine */ });
   }, []);
 
   return version;

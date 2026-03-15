@@ -203,7 +203,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     if (!streaming) {
       // Kick off store metadata fetch in parallel with package download.
       // Works for Firefox (AMO API), Chrome, Edge, and Opera (HTML scrapers).
-      // Failure is always non-fatal — the report falls back gracefully.
+      // Failure is always non-fatal - the report falls back gracefully.
       const storeDataPromise = source.type === 'id'
         ? dispatchStoreDataFetch(source.value, fetchImpl, securityConfig.upstreamTimeoutMs, scraperConfig, kv)
         : Promise.resolve({ attempted: false as const });

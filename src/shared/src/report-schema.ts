@@ -79,7 +79,7 @@ export const ScoringBasisSchema = z.enum([
   'manifest-and-store',
   /**
    * Store scraping was attempted for this ecosystem (Chrome, Edge, Opera) but
-   * the request failed — network error, rate-limit, unexpected page structure,
+   * the request failed - network error, rate-limit, unexpected page structure,
    * or the store returned no usable data.
    *
    * Scoring falls back to manifest-only, but the UI surfaces a grayed-out

@@ -1,12 +1,12 @@
-# Threat Model — ExtensionChecker
+# Threat Model - ExtensionChecker
 
 This threat model uses the **Four Questions Framework** (Adam Shostack) to
 systematically identify threats to ExtensionChecker. Findings are classified
 using **STRIDE** and each is assessed for current mitigation status.
 
 > **Companion documents:**
-> - [ARCHITECTURE.md](ARCHITECTURE.md) — component overview and deployment diagrams
-> - [DATA_FLOWS.md](DATA_FLOWS.md) — data flows, trust boundaries, and sensitive data inventory
+> - [ARCHITECTURE.md](ARCHITECTURE.md) - component overview and deployment diagrams
+> - [DATA_FLOWS.md](DATA_FLOWS.md) - data flows, trust boundaries, and sensitive data inventory
 
 ---
 
@@ -137,7 +137,7 @@ graph TD
 | T-3 | Tampered request body | A1: API endpoints | Attacker modifies JSON body to inject unexpected fields or values. | Zod schema validation (`AnalyzeRequestSchema`) strips/rejects unknown fields; body size limit (16 KB for JSON, 82 MB for upload). | ✅ Mitigated |
 | T-4 | Archive with malicious filenames | A5: Archive processing | ZIP entries with path traversal (`../`) or null bytes to confuse parsers. | Null byte rejection; path traversal rejection (`../` and leading `/`); no disk writes (memory-only extraction). | ✅ Mitigated |
 | T-5 | Localization injection | A5: Archive processing | Crafted `_locales/` files that return malicious strings for manifest name resolution. | Locale values are treated as display strings only; React auto-escapes all rendered text; no `dangerouslySetInnerHTML` usage in report display. | ✅ Mitigated |
-| T-6 | Supply chain — compromised npm dependency | Build pipeline | Malicious code injected via a compromised transitive dependency (e.g., fflate, marked, jsPDF). | No runtime dependency pinning or SRI for bundled libs; standard npm lockfile used. | ⚠️ Partial |
+| T-6 | Supply chain - compromised npm dependency | Build pipeline | Malicious code injected via a compromised transitive dependency (e.g., fflate, marked, jsPDF). | No runtime dependency pinning or SRI for bundled libs; standard npm lockfile used. | ⚠️ Partial |
 
 ---
 
@@ -168,8 +168,8 @@ graph TD
 
 | ID | Threat | Attack Surface | Description | Controls in Place | Status |
 |----|--------|---------------|-------------|-------------------|--------|
-| D-1 | Zip bomb — entry count explosion | A5: Archive processing | ZIP with thousands of entries to exhaust central directory parsing. | Hard limit: max 5,000 entries; rejected before any decompression. | ✅ Mitigated |
-| D-2 | Zip bomb — compression ratio | A5: Archive processing | Highly compressed file that expands to enormous size when decompressed. | Compression ratio limit (1000:1) checked from ZIP headers before decompression; per-file limit 5 MB uncompressed. | ✅ Mitigated |
+| D-1 | Zip bomb - entry count explosion | A5: Archive processing | ZIP with thousands of entries to exhaust central directory parsing. | Hard limit: max 5,000 entries; rejected before any decompression. | ✅ Mitigated |
+| D-2 | Zip bomb - compression ratio | A5: Archive processing | Highly compressed file that expands to enormous size when decompressed. | Compression ratio limit (1000:1) checked from ZIP headers before decompression; per-file limit 5 MB uncompressed. | ✅ Mitigated |
 | D-3 | Oversized upload | A2: File upload | Attacker uploads maximum-size files repeatedly to consume bandwidth and Worker CPU. | 80 MB file size limit; `Content-Length` checked before body read (82 MB with overhead); rate limiting per-IP (30/min, 2000/day). | ✅ Mitigated |
 | D-4 | Oversized remote package | A7: External downloads | Store returns an unexpectedly large package to exhaust Worker memory. | 80 MB size limit enforced; `Content-Length` header checked before download where available; `AbortSignal.timeout()` enforced (default 30s). | ✅ Mitigated |
 | D-5 | Slowloris / slow-read on external fetch | A7: External downloads | A malicious or slow external store sends bytes slowly to hold Worker connections. | `AbortSignal.timeout()` on fetch (default 30s configurable via `API_UPSTREAM_TIMEOUT_MS`). | ✅ Mitigated |
@@ -243,7 +243,7 @@ pie title Mitigation Status (29 findings)
 
 ---
 
-## Threat Model Diagram — Full View
+## Threat Model Diagram - Full View
 
 ```mermaid
 graph TB
@@ -314,4 +314,4 @@ This threat model should be reviewed:
 
 _Last reviewed: 2026-03-14_
 _Version: 1.0_
-_Scope: ExtensionChecker v0.1.0 — manifest-first analysis, no persistence, no user accounts_
+_Scope: ExtensionChecker v0.1.0 - manifest-first analysis, no persistence, no user accounts_

@@ -81,7 +81,7 @@ export function trustScoreBand(score: number): string {
  */
 export function trustScoreColor(score: number): string {
   if (score <= 20) {
-    return '#ef4444'; // red — low trust
+    return '#ef4444'; // red - low trust
   }
 
   if (score <= 40) {
@@ -96,7 +96,7 @@ export function trustScoreColor(score: number): string {
     return '#84cc16'; // lime green
   }
 
-  return '#22c55e'; // green — high trust
+  return '#22c55e'; // green - high trust
 }
 
 export function formatBytes(bytes: number): string {

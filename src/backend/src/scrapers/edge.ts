@@ -10,7 +10,7 @@
  *  Field names in the JSON have varied across Edge Add-ons deployments, so the
  *  parser tries multiple known paths for each signal.
  *
- * Failure is non-fatal — null is returned for any network, parse, or
+ * Failure is non-fatal - null is returned for any network, parse, or
  * structure error so the caller can fall back to manifest-only scoring.
  */
 
@@ -69,7 +69,7 @@ export async function fetchEdgeStoreData(
 ): Promise<ScrapedStoreData | null> {
   if (!extensionId || extensionId.length === 0) return null;
 
-  // Edge redirects /detail/{id} to /detail/{slug}/{id} — allow the redirect.
+  // Edge redirects /detail/{id} to /detail/{slug}/{id} - allow the redirect.
   const url = `${EDGE_STORE_BASE}${encodeURIComponent(extensionId)}`;
 
   let response: Response;

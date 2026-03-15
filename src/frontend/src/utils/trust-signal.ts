@@ -24,14 +24,14 @@ export function overallTrustScore(report: AnalysisReport): number {
 
 /**
  * Returns a concise, human-readable sentence explaining what specific store
- * signals drove the trust component — surfacing tensions when rating and
+ * signals drove the trust component - surfacing tensions when rating and
  * download count tell contradictory stories.
  *
  * Returns null when no store metadata is available (manifest-only analysis).
  *
  * Examples:
- *   "Rated 5.0★ but only 12 users — a high rating with limited adoption carries less weight."
- *   "800K users but rated only 1.8★ — broad adoption with below-average satisfaction is a caution signal."
+ *   "Rated 5.0★ but only 12 users - a high rating with limited adoption carries less weight."
+ *   "800K users but rated only 1.8★ - broad adoption with below-average satisfaction is a caution signal."
  *   "Strong trust signals: 4.6★ avg rating with 1.2M active users."
  */
 export function trustSignalExplanation(report: AnalysisReport): string | null {
@@ -57,11 +57,11 @@ export function trustSignalExplanation(report: AnalysisReport): string | null {
     const lowUsers = userCount! < 1_000;
 
     if (highRating && lowUsers) {
-      return `Rated ${ratingStr} but only ${userStr} users — a high rating with limited adoption carries less weight.`;
+      return `Rated ${ratingStr} but only ${userStr} users - a high rating with limited adoption carries less weight.`;
     }
 
     if (lowRating && highUsers) {
-      return `${userStr} users but rated only ${ratingStr} — broad adoption with below-average satisfaction is a caution signal.`;
+      return `${userStr} users but rated only ${ratingStr} - broad adoption with below-average satisfaction is a caution signal.`;
     }
 
     if (highRating && highUsers) {
@@ -69,7 +69,7 @@ export function trustSignalExplanation(report: AnalysisReport): string | null {
     }
 
     if (lowRating && lowUsers) {
-      return `Weak trust signals: ${ratingStr} avg rating and only ${userStr} users — insufficient evidence to establish confidence.`;
+      return `Weak trust signals: ${ratingStr} avg rating and only ${userStr} users - insufficient evidence to establish confidence.`;
     }
 
     return `Store signals: ${ratingStr} avg rating, ${userStr} active users.`;
@@ -77,14 +77,14 @@ export function trustSignalExplanation(report: AnalysisReport): string | null {
 
   if (hasRating && !hasUsers) {
     return rating! >= 4.0
-      ? `Rated ${ratingStr} on the store — no active user count available to corroborate.`
-      : `Below-average rating (${ratingStr}) — no active user count available.`;
+      ? `Rated ${ratingStr} on the store - no active user count available to corroborate.`
+      : `Below-average rating (${ratingStr}) - no active user count available.`;
   }
 
   // hasUsers only
   return userCount! >= 100_000
-    ? `${userStr} active users on the store — no rating data available.`
-    : `Only ${userStr} users on the store — limited adoption signal.`;
+    ? `${userStr} active users on the store - no rating data available.`
+    : `Only ${userStr} users on the store - limited adoption signal.`;
 }
 
 function formatUserCount(count: number): string {
