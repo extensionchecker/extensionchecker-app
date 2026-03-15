@@ -192,7 +192,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Backend request failed with status 502.')).toBeInTheDocument();
+      expect(screen.getByText('The analysis service is temporarily unavailable. Please try again in a moment.')).toBeInTheDocument();
     });
   });
 

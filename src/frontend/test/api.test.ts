@@ -63,7 +63,119 @@ describe('frontend api client', () => {
       headers: { 'content-type': 'text/html' }
     }));
 
-    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(/server error 502/);
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'The analysis service is temporarily unavailable. Please try again in a moment.'
+    );
+  });
+
+  it('returns a friendly 413 message when Cloudflare rejects an oversized upload', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(
+      '<html><body><h1>413 Payload Too Large</h1></body></html>',
+      { status: 413, headers: { 'content-type': 'text/html' } }
+    ));
+
+    await expect(analyzeExtensionByUpload(new File(['x'], 'big.zip'))).rejects.toThrow(
+      'The extension package is too large to analyze. The maximum supported size is 80 MB.'
+    );
+  });
+
+  it('returns a friendly 429 message when rate limited with no Retry-After header', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 429,
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'Too many requests. Please wait a moment and try again.'
+    );
+  });
+
+  it('includes seconds wait when Retry-After header is a delay in seconds', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'retry-after': '42' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'Too many requests. Please try again in 42 seconds.'
+    );
+  });
+
+  it('rounds Retry-After seconds up to minutes when >= 60', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'retry-after': '90' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'Too many requests. Please try again in 2 minutes.'
+    );
+  });
+
+  it('uses singular "second" when Retry-After is 1', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'retry-after': '1' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'Too many requests. Please try again in 1 second.'
+    );
+  });
+
+  it('falls back to no-wait message when Retry-After header is unparseable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 429,
+      headers: { 'content-type': 'application/json', 'retry-after': 'garbage-value' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'Too many requests. Please wait a moment and try again.'
+    );
+  });
+
+  it('returns a friendly 401 message when unauthenticated', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 401,
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'Access denied. Authentication is required to use this service.'
+    );
+  });
+
+  it('returns a friendly 403 message when forbidden', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 403,
+      headers: { 'content-type': 'application/json' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'Access denied. You do not have permission to use this service.'
+    );
+  });
+
+  it('returns a friendly 500 message when the server errors with an empty body', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('', {
+      status: 500,
+      headers: { 'content-type': 'text/html' }
+    }));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'The analysis service is temporarily unavailable. Please try again in a moment.'
+    );
+  });
+
+  it('still uses backend JSON error message when present (preferred over friendly fallback)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(
+      JSON.stringify({ error: 'Rate limit exceeded for this IP (per-minute quota). Please retry shortly.' }),
+      { status: 429, headers: { 'content-type': 'application/json' } }
+    ));
+
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'Rate limit exceeded for this IP (per-minute quota). Please retry shortly.'
+    );
   });
 
   it('throws contract errors for malformed report payloads', async () => {
@@ -281,7 +393,9 @@ describe('frontend api client', () => {
       headers: { 'content-type': 'application/json' }
     }));
 
-    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow('Backend request failed with status 500.');
+    await expect(analyzeExtensionByUrl('https://example.com/extension.zip')).rejects.toThrow(
+      'The analysis service is temporarily unavailable. Please try again in a moment.'
+    );
   });
 
   it('handles SSE error event with unknown format', async () => {

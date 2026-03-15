@@ -17,6 +17,72 @@ function mapFetchError(error: unknown): never {
   throw error;
 }
 
+/**
+ * Parses a `Retry-After` header value (seconds delay or HTTP date) into a
+ * human-readable wait string, e.g. "in 42 seconds" or "after 2:15 PM".
+ * Returns null when the header is absent or unparseable.
+ */
+function parseRetryAfter(headers: Headers): string | null {
+  const raw = headers.get('retry-after');
+  if (!raw) {
+    return null;
+  }
+
+  // RFC 7231 §7.1.3: value is either a delay-seconds integer or an HTTP-date.
+  const asSeconds = Number(raw.trim());
+  if (Number.isFinite(asSeconds) && asSeconds >= 0) {
+    const secs = Math.ceil(asSeconds);
+    if (secs === 0) {
+      return 'shortly';
+    }
+    if (secs < 60) {
+      return `in ${secs} second${secs === 1 ? '' : 's'}`;
+    }
+    const mins = Math.ceil(secs / 60);
+    return `in ${mins} minute${mins === 1 ? '' : 's'}`;
+  }
+
+  // HTTP-date: parse and format as local time.
+  const asDate = new Date(raw);
+  if (!Number.isNaN(asDate.getTime())) {
+    return `after ${asDate.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  }
+
+  return null;
+}
+
+/**
+ * Converts an HTTP error status into a plain-language message suitable for
+ * display to end users. Used when the response body is absent, non-JSON
+ * (e.g. a Cloudflare HTML error page), or lacks an `error` field.
+ */
+function friendlyHttpError(status: number, headers: Headers): Error {
+  if (status === 401) {
+    return new Error('Access denied. Authentication is required to use this service.');
+  }
+  if (status === 403) {
+    return new Error('Access denied. You do not have permission to use this service.');
+  }
+  if (status === 408) {
+    return new Error('The request timed out. Please try again.');
+  }
+  if (status === 413) {
+    return new Error('The extension package is too large to analyze. The maximum supported size is 80 MB.');
+  }
+  if (status === 429) {
+    const wait = parseRetryAfter(headers);
+    return new Error(
+      wait
+        ? `Too many requests. Please try again ${wait}.`
+        : 'Too many requests. Please wait a moment and try again.'
+    );
+  }
+  if (status >= 500) {
+    return new Error('The analysis service is temporarily unavailable. Please try again in a moment.');
+  }
+  return new Error('Analysis request failed. Please check your input and try again.');
+}
+
 async function parseReportResponse(response: Response): Promise<AnalysisReport> {
   const rawBody = await response.text();
   let body: unknown = null;
@@ -26,10 +92,7 @@ async function parseReportResponse(response: Response): Promise<AnalysisReport> 
       body = JSON.parse(rawBody) as unknown;
     } catch {
       if (!response.ok) {
-        const hint = response.status >= 500
-          ? ' The extension package may be too large or complex. Try the Upload tab with the file directly.'
-          : '';
-        throw new Error(`Analysis failed (server error ${response.status}).${hint}`);
+        throw friendlyHttpError(response.status, response.headers);
       }
 
       throw new Error('Backend returned invalid JSON.');
@@ -37,13 +100,15 @@ async function parseReportResponse(response: Response): Promise<AnalysisReport> 
   }
 
   if (!response.ok) {
-    const error = typeof body === 'object'
+    // Prefer the backend's own error message (already user-friendly for most cases).
+    // Fall back to a friendly status-based message when the body is absent or malformed.
+    const backendMessage = typeof body === 'object'
       && body !== null
       && 'error' in body
       && typeof body.error === 'string'
       ? body.error
-      : `Backend request failed with status ${response.status}.`;
-    throw new Error(error);
+      : null;
+    throw backendMessage ? new Error(backendMessage) : friendlyHttpError(response.status, response.headers);
   }
 
   const parsed = AnalysisReportSchema.safeParse(body);
