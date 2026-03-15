@@ -1,0 +1,46 @@
+# CODEOWNERS — automatic review assignment for pull requests.
+#
+# Each line maps a pattern to one or more GitHub users or teams.
+# The last matching pattern takes precedence.
+#
+# Replace "@extensionchecker/maintainers" with specific GitHub usernames
+# (e.g. "@yourhandle") or a GitHub team slug from your organisation
+# (e.g. "@extensionchecker/core") before enabling branch protection rules
+# that require CODEOWNERS review.
+#
+# Reference:
+#   https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ── Global fallback ──────────────────────────────────────────────────────────
+*                                     @extensionchecker/maintainers
+
+# ── Shared contracts ─────────────────────────────────────────────────────────
+# Any change here may break all packages — always require maintainer sign-off.
+src/shared/                           @extensionchecker/maintainers
+
+# ── Analysis engine ──────────────────────────────────────────────────────────
+# Scoring logic and risk signals — security-sensitive.
+src/engine/                           @extensionchecker/maintainers
+
+# ── Backend ──────────────────────────────────────────────────────────────────
+# Security controls, input validation, archive processing, SSRF defences.
+# Any change here has direct security implications.
+src/backend/                          @extensionchecker/maintainers
+
+# ── Frontend ─────────────────────────────────────────────────────────────────
+src/frontend/                         @extensionchecker/maintainers
+
+# ── Documentation ────────────────────────────────────────────────────────────
+docs/                                 @extensionchecker/maintainers
+README.md                             @extensionchecker/maintainers
+CONTRIBUTING.md                       @extensionchecker/maintainers
+
+# ── Security & governance (always require maintainer review) ─────────────────
+SECURITY.md                           @extensionchecker/maintainers
+CODE_OF_CONDUCT.md                    @extensionchecker/maintainers
+LICENSE                               @extensionchecker/maintainers
+src/frontend/public/.well-known/      @extensionchecker/maintainers
+
+# ── CI / CD & repository configuration ───────────────────────────────────────
+.github/                              @extensionchecker/maintainers
+codecov.yml                           @extensionchecker/maintainers

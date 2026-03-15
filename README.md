@@ -5,6 +5,7 @@
 [![tests](https://img.shields.io/github/actions/workflow/status/extensionchecker/extensionchecker-app/ci.yml?branch=main&label=tests&logo=githubactions&logoColor=white)](https://github.com/extensionchecker/extensionchecker-app/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/extensionchecker/extensionchecker-app/branch/main/graph/badge.svg)](https://codecov.io/gh/extensionchecker/extensionchecker-app)
 [![Dependabot](https://img.shields.io/badge/dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](https://github.com/extensionchecker/extensionchecker-app/security/dependabot)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![issues](https://img.shields.io/github/issues/extensionchecker/extensionchecker-app?label=issues)](https://github.com/extensionchecker/extensionchecker-app/issues)
 [![last commit](https://img.shields.io/github/last-commit/extensionchecker/extensionchecker-app?label=last%20commit)](https://github.com/extensionchecker/extensionchecker-app/commits/main)
 [![node](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fextensionchecker%2Fextensionchecker-app%2Fmain%2Fsrc%2Fpackage.json&query=%24.engines.node&label=node&logo=node.js&logoColor=white)](https://github.com/extensionchecker/extensionchecker-app/blob/main/src/package.json)
