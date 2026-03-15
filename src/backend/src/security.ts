@@ -97,11 +97,37 @@ export function isMultipartContentType(contentType: string | undefined): boolean
   return contentType.toLowerCase().startsWith('multipart/form-data');
 }
 
+/**
+ * Compares two strings in constant time to prevent timing side-channel attacks.
+ * Pads both inputs to the same byte length before XOR-comparing every byte so
+ * the loop runtime does not depend on where the first differing character is.
+ */
+function timingSafeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const bufA = encoder.encode(a);
+  const bufB = encoder.encode(b);
+  const maxLen = Math.max(bufA.length, bufB.length);
+
+  // Allocate padded buffers of equal length so the loop is unconditional.
+  const paddedA = new Uint8Array(maxLen);
+  const paddedB = new Uint8Array(maxLen);
+  paddedA.set(bufA);
+  paddedB.set(bufB);
+
+  // Accumulate differences across all bytes. A non-zero result means not equal.
+  let diff = bufA.length ^ bufB.length;
+  for (let i = 0; i < maxLen; i++) {
+    diff |= (paddedA[i] ?? 0) ^ (paddedB[i] ?? 0);
+  }
+
+  return diff === 0;
+}
+
 export function hasValidApiAccessToken(headers: Headers, token: string | null): boolean {
   if (!token) {
     return true;
   }
 
-  const presented = headers.get('x-extensionchecker-token')?.trim();
-  return typeof presented === 'string' && presented.length > 0 && presented === token;
+  const presented = headers.get('x-extensionchecker-token')?.trim() ?? '';
+  return presented.length > 0 && timingSafeEqual(presented, token);
 }

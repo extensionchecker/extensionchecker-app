@@ -310,9 +310,11 @@ export function registerAnalyzeRoute(app: Hono, deps: RouteDeps): void {
         await stream.writeSSE({ event: 'result', data: JSON.stringify(reportResult.report) });
       } catch (error) {
         console.error('Unhandled SSE stream error:', error);
-        const message = error instanceof Error ? error.message : 'Unexpected stream error.';
+        // Do NOT forward the raw error message to the client: unhandled errors
+        // may contain internal paths, library versions, or other implementation
+        // details.  Log the details server-side and return a generic message.
         try {
-          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: message }) });
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Unexpected analysis error.' }) });
         } catch {
           // Stream already closed; nothing more we can do.
         }

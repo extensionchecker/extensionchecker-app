@@ -1,7 +1,7 @@
 import { type PackageKind, detectPackageKind } from './archive';
 import { ALLOWED_PACKAGE_EXTENSIONS, MAX_PACKAGE_SIZE_BYTES } from './constants';
 import { resolveExtensionIdCandidates } from './id-resolution';
-import { validatePublicFetchUrl } from './url-safety';
+import { validatePublicFetchUrl, validateRedirectDestination } from './url-safety';
 import type { AnalyzeSource } from './schemas';
 
 /**
@@ -156,6 +156,23 @@ export async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeout
 
   if (!response.ok) {
     throw new Error(`Failed to download extension package (${response.status}).`);
+  }
+
+  // Re-validate the final URL after redirect resolution to defend against
+  // SSRF via open redirects on store domains.  We only check for private/
+  // loopback destinations here — the allowlist was already applied to the
+  // initial URL, and legitimate store downloads frequently redirect to CDN
+  // hosts that are outside the store-specific allowlist.
+  //
+  // Only run this check when response.url is non-empty: the WHATWG fetch
+  // spec sets response.url to the final URL after redirect resolution, but
+  // test environments that construct Response objects manually leave it as
+  // an empty string.
+  if (response.url) {
+    const redirectReason = validateRedirectDestination(response.url);
+    if (redirectReason !== null) {
+      throw new Error(`Package download redirected to an unsafe destination: ${redirectReason}`);
+    }
   }
 
   const contentLength = response.headers.get('content-length');

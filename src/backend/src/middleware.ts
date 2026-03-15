@@ -13,7 +13,7 @@ export function registerSecurityHeaders(app: Hono): void {
     context.header('permissions-policy', 'accelerometer=(), ambient-light-sensor=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
     context.header('cross-origin-resource-policy', 'same-origin');
     context.header('cross-origin-opener-policy', 'same-origin');
-    context.header('strict-transport-security', 'max-age=31536000');
+    context.header('strict-transport-security', 'max-age=31536000; includeSubDomains');
   });
 }
 

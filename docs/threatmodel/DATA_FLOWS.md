@@ -53,7 +53,7 @@ graph TB
 | TB1 | Public Internet → Cloudflare Edge | **Untrusted → Platform** | All user HTTP requests, attacker traffic |
 | TB2 | Cloudflare Edge → Frontend Worker | **Platform → App** | TLS-terminated requests, Cloudflare-injected headers (`cf-connecting-ip`) |
 | TB3 | Frontend Worker → Backend Worker | **App → App (elevated)** | Proxied API requests with injected auth token |
-| TB4 | Backend Worker → External Stores | **App → Third-party** | HTTPS fetches for extension packages; response content is **untrusted** |
+| TB4 | Backend Worker → External Stores | **App → Third-party** | HTTPS fetches for extension packages; response content AND redirect destinations are **untrusted** |
 | TB5 | External Package → Archive Extractor | **Untrusted content → Parser** | ZIP archive bytes - most critical attack surface |
 
 ---
@@ -96,9 +96,10 @@ sequenceDiagram
     loop Try each download candidate
         BW->>Store: GET download URL
         Note over BW,Store: TB4 - Crosses into third-party trust
-        Store-->>BW: Extension package bytes (or error)
+        Store-->>BW: Extension package bytes (or redirect)
     end
 
+    Note over BW: Validate response.url (final URL after redirects)<br/>Reject private IPs, localhost, ::ffff: mapped addresses
     Note over BW: Enforce size limit (≤ 80 MB)
     Note over BW: TB5 - Parse untrusted archive
 
@@ -271,7 +272,8 @@ flowchart TD
 ## Data Flow 6: Security Control Chain (Backend)
 
 Every API request passes through this ordered chain of security controls
-before any business logic executes.
+before any business logic executes. Token comparison uses a constant-time
+XOR-over-padded-buffers function to prevent timing side-channel attacks.
 
 ```mermaid
 flowchart TD

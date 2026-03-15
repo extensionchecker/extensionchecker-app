@@ -66,11 +66,16 @@ describe('security helpers', () => {
     expect(resolveClientKey(new Headers({ 'x-forwarded-for': 'not-an-ip' }))).toBe('unknown');
   });
 
-  it('validates optional access token headers', () => {
+  it('validates optional access token headers using constant-time comparison', () => {
     const headers = new Headers({ 'x-extensionchecker-token': 'abc123' });
     expect(hasValidApiAccessToken(headers, null)).toBe(true);
     expect(hasValidApiAccessToken(headers, 'abc123')).toBe(true);
     expect(hasValidApiAccessToken(headers, 'wrong')).toBe(false);
+    // Tokens that differ only in length must not be accepted.
+    expect(hasValidApiAccessToken(headers, 'abc123extra')).toBe(false);
+    expect(hasValidApiAccessToken(headers, 'abc12')).toBe(false);
+    // Empty presented token must be rejected even when a token is configured.
+    expect(hasValidApiAccessToken(new Headers(), 'abc123')).toBe(false);
   });
 
   it('detects json and multipart content types', () => {

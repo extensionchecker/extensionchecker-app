@@ -153,12 +153,16 @@ The Backend Worker handles all business logic:
 - **CORS & origin enforcement** - validates `Origin` header against an
   allowlist.
 - **Token authentication** - optional shared-secret check via
-  `x-extensionchecker-token`.
+  `x-extensionchecker-token`; comparison uses a constant-time XOR function
+  to eliminate timing side-channels.
 - **Rate limiting** - in-memory per-IP and global rate limiter with
-  per-minute and per-day windows.
+  per-minute and per-day windows; map size capped at 20,000 keys.
 - **Input validation** - Zod schemas for all request bodies.
-- **URL safety** - SSRF protection: HTTPS-only, private IP rejection,
-  host allowlist.
+- **URL safety** - SSRF protection: HTTPS-only, private IP rejection
+  (including IPv4-mapped IPv6 `::ffff:*` addresses), host allowlist.
+- **Post-redirect validation** - after following HTTP redirects, the final
+  `response.url` is checked against private-IP and localhost gates to
+  prevent SSRF via open redirects on store domains.
 - **ID resolution** - maps extension IDs to download URL candidates per
   ecosystem.
 - **Package download** - fetches extension packages from allowlisted store
@@ -168,6 +172,30 @@ The Backend Worker handles all business logic:
   defenses.
 - **Analysis** - delegates to the engine for manifest analysis and risk
   scoring.
+
+**Backend source modules** (`src/backend/src/`):
+
+| Module | Responsibility |
+|--------|---------------|
+| `app.ts` | Factory: creates the Hono app, wires middleware, delegates to route registrars |
+| `route-analyze.ts` | `POST /api/analyze` handler (URL + ID sources, JSON + SSE) |
+| `route-upload.ts` | `POST /api/analyze/upload` handler (multipart file upload, JSON + SSE) |
+| `route-deps.ts` | `RouteDeps` type injected into route registrars |
+| `middleware.ts` | Security-header middleware, API auth/rate-limit middleware, `wantsEventStream` |
+| `security.ts` | Request-level validation: origin/CORS, client IP, content-type, constant-time token check |
+| `security-config.ts` | `BackendSecurityEnv`, `SecurityConfig` types; env parsers and config builders |
+| `rate-limiter.ts` | `InMemoryRateLimiter` class; tumbling-window per-IP and global counters |
+| `url-safety.ts` | `validatePublicFetchUrl`, `validateRedirectDestination`, private-IP helpers |
+| `archive.ts` | ZIP/CRX/XPI extraction with full adversarial-archive validation |
+| `download.ts` | `downloadPackage`, `resolveAndDownloadExtensionId`, extension helpers |
+| `id-resolution.ts` | Maps ecosystem-prefixed IDs to download URL candidates |
+| `listing-url.ts` | Extracts extension identifiers from store listing URLs |
+| `report.ts` | Builds `AnalysisReport` from manifest + store data |
+| `schemas.ts` | Zod schemas for API request and manifest types |
+| `constants.ts` | Shared numeric constants (size limits, extension lists) |
+| `store-metadata.ts` | Assembles store metadata from scraper results |
+| `scrapers/` | Per-store HTML scrapers (Chrome, Edge, Opera) + KV caching |
+| `worker.ts` | Cloudflare Worker entry point |
 
 ### Analysis Engine
 

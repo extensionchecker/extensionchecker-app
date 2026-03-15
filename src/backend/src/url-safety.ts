@@ -58,7 +58,17 @@ function isPrivateIPv4(hostname: string): boolean {
 
 function isPrivateIPv6(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
-  return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80');
+  return (
+    normalized === '::1' ||
+    // Unique-local (ULA) and link-local ranges
+    normalized.startsWith('fc') ||
+    normalized.startsWith('fd') ||
+    normalized.startsWith('fe80') ||
+    // IPv4-mapped IPv6 addresses (::ffff:x.x.x.x / ::ffff:0:0/96).
+    // These resolve to IPv4 addresses and could bypass private-IP checks
+    // if only the IPv4 representation is tested.
+    normalized.startsWith('::ffff')
+  );
 }
 
 export function validatePublicFetchUrl(rawUrl: string): { ok: true; url: URL } | { ok: false; reason: string } {
@@ -91,4 +101,45 @@ export function validatePublicFetchUrl(rawUrl: string): { ok: true; url: URL } |
   }
 
   return { ok: true, url: parsedUrl };
+}
+
+/**
+ * Validates the final URL reached after an HTTP redirect chain.
+ *
+ * Unlike {@link validatePublicFetchUrl} this does NOT apply the extension-store
+ * allowlist — legitimate store downloads can redirect to first-party CDN hosts
+ * outside the allowlist.  Instead it gates only on the properties that would
+ * enable SSRF: non-HTTPS scheme, localhost/local hostnames, and private or
+ * loopback IP addresses (including IPv4-mapped IPv6 addresses).
+ *
+ * Returns a reason string when the destination is unsafe, or null when safe.
+ */
+export function validateRedirectDestination(finalUrl: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(finalUrl);
+  } catch {
+    return 'Redirect destination is not a valid URL.';
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return 'Redirect destination must use HTTPS.';
+  }
+
+  // WHATWG URL includes brackets for IPv6 hosts (e.g. "[::1]").  Strip them
+  // before running private-IP checks so the functions receive a bare address.
+  const rawHostname = parsed.hostname.toLowerCase();
+  const hostname = rawHostname.startsWith('[') && rawHostname.endsWith(']')
+    ? rawHostname.slice(1, -1)
+    : rawHostname;
+
+  if (hostname === 'localhost' || hostname.endsWith('.local')) {
+    return 'Redirect destination resolves to a local hostname.';
+  }
+
+  if (isPrivateIPv4(hostname) || isPrivateIPv6(hostname)) {
+    return 'Redirect destination resolves to a private or loopback address.';
+  }
+
+  return null;
 }

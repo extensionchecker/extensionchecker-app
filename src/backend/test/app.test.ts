@@ -1091,6 +1091,10 @@ describe('backend app', () => {
     expect(response.status).toBe(200);
     const text = await response.text();
     expect(text).toContain('event: error');
-    expect(text).toContain('Simulated unexpected archive error');
+    // The outer SSE catch must NOT forward raw internal error messages to the
+    // client (information disclosure risk).  It must always emit a generic
+    // message and log the details server-side instead.
+    expect(text).toContain('Unexpected analysis error.');
+    expect(text).not.toContain('Simulated unexpected archive error');
   });
 });

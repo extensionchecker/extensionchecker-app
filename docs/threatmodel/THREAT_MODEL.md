@@ -156,11 +156,12 @@ graph TD
 | ID | Threat | Attack Surface | Description | Controls in Place | Status |
 |----|--------|---------------|-------------|-------------------|--------|
 | I-1 | Verbose error messages leak internals | A1: API endpoints | Stack traces, internal paths, or library versions exposed in error responses. | Error responses use generic messages (`"manifest.json is missing..."`, `"Failed to download..."`); no stack traces in production responses. | ✅ Mitigated |
-| I-2 | Timing side-channel on token validation | A1: API endpoints | Token comparison using `===` leaks token length/content through response timing differences. | Token compared with `===` (not constant-time). Low practical risk over network, but theoretically exploitable. | ⚠️ Partial |
+| I-2 | Timing side-channel on token validation | A1: API endpoints | Token comparison using `===` leaks token length/content through response timing differences. | Token compared with a constant-time XOR-over-padded-buffers function. Loop always runs for `max(len(a), len(b))` iterations; length mismatch accumulated via XOR so no branch is taken on first difference. | ✅ Mitigated |
 | I-3 | IP address exposure in rate limit headers | A1: API endpoints | Rate limit response headers (`x-ratelimit-remaining-*`) confirm the server's view of the client's IP. | Headers expose counter state but not the raw IP itself; IP is already known to the client. Minimal additional disclosure. | ✅ Mitigated |
 | I-4 | Extension package content exposure | A5: Archive processing | Full extension package held in Worker memory could leak through memory safety bugs. | Cloudflare Workers use V8 isolates (memory-safe); no disk writes; package bytes discarded after analysis. | ✅ Mitigated |
 | I-5 | Server version/technology fingerprinting | A1: API endpoints | Response headers or error messages reveal technology stack. | No `Server` header set; no version info in responses. `X-Content-Type-Options: nosniff` prevents MIME sniffing. | ✅ Mitigated |
 | I-6 | Report data exposed to third-party JS libraries | A8: Frontend | jsPDF and marked libraries process report data; if compromised, they could exfiltrate. | Libraries loaded from npm bundle (not CDN); CSP not yet implemented; jsPDF operates on data already shown to user. | ⚠️ Partial |
+| I-7 | Internal error messages leaked via SSE stream | A1: API endpoints | Unexpected exceptions caught by the outermost SSE error handler could forward raw `error.message` (internal paths, library versions) to the client. | The outer SSE catch emits a fixed generic string (`"Unexpected analysis error."`) and logs details server-side only. Inner catches for expected error paths (download failures, archive errors) still emit context-appropriate user-facing messages. | ✅ Mitigated |
 
 ---
 
@@ -186,20 +187,21 @@ graph TD
 |----|--------|---------------|-------------|-------------------|--------|
 | E-1 | SSRF via user-supplied URL | A3: User-supplied URLs | Attacker provides a URL pointing to internal services, cloud metadata, or private networks. | `validatePublicFetchUrl()`: HTTPS-only; reject localhost, `.local`, private IPv4 (10/8, 127/8, 169.254/16, 172.16/12, 192.168/16), private IPv6 (::1, fc00::/7, fe80::/10); strict host allowlist. | ✅ Mitigated |
 | E-2 | SSRF via DNS rebinding | A3: User-supplied URLs | URL resolves to public IP initially, then re-resolves to internal IP during fetch. | URL validated before fetch; host must be in the allowlist (store-specific domains only); Cloudflare Workers resolve DNS at the platform level. | ✅ Mitigated |
-| E-3 | SSRF via HTTP redirect from store | A7: External downloads | Store returns a 3xx redirect to an internal or unauthorized URL. | Cloudflare `fetch()` follows redirects by default. No explicit post-redirect URL re-validation. **Residual risk**: a compromised store could redirect to an arbitrary URL. | ⚠️ Partial |
+| E-3 | SSRF via HTTP redirect from store | A7: External downloads | Store returns a 3xx redirect to an internal or unauthorized URL. | After following redirects, `response.url` (the final URL) is validated by `validateRedirectDestination()`: rejects non-HTTPS destinations, localhost/`.local` hosts, all private IPv4 ranges, and IPv6 loopback/ULA/link-local/IPv4-mapped (`::ffff:*`) ranges. The strict store allowlist is not re-applied (CDN redirects from legitimate stores are permitted) but the SSRF surface is eliminated. | ✅ Mitigated |
 | E-4 | Prototype pollution via JSON.parse | A6: Manifest parsing | Crafted JSON with `__proto__` keys to pollute Object prototype. | Zod schema explicitly defines expected keys; `passthrough()` on unknown keys but values are not spread onto objects. V8 has hardened `JSON.parse` against prototype pollution. | ✅ Mitigated |
 | E-5 | Code injection via manifest values | A6: Manifest parsing | Manifest fields containing `<script>` tags or event handlers rendered in the frontend. | React auto-escapes all interpolated values; no `dangerouslySetInnerHTML`; PDF generation uses jsPDF text methods (not HTML injection). | ✅ Mitigated |
 | E-6 | Unauthorized backend access (no token) | A1: API endpoints | Direct requests to backend Worker bypassing the Frontend Worker and its token injection. | Backend has no public route in production; reachable only via Cloudflare service binding from Frontend Worker. API token check enforced when configured. | ✅ Mitigated |
 | E-7 | Extension ID injection into download URL | A4: Extension IDs | Crafted ID value injects path segments or query parameters into constructed download URLs. | Chrome/Edge IDs validated against `/^[a-p]{32}$/`; Firefox/Opera IDs passed through `encodeURIComponent()`; download URL templates use string interpolation with encoded values. | ✅ Mitigated |
+| E-8 | SSRF via IPv4-mapped IPv6 addresses | A3: User-supplied URLs, A7: External downloads | An attacker supplies a URL containing an IPv4-mapped IPv6 address (e.g. `[::ffff:7f00:1]` which maps to `127.0.0.1`) to bypass private-IP checks that only inspect the IPv4 representation. | `isPrivateIPv6()` explicitly checks for the `::ffff:` prefix in addition to loopback (`::1`), ULA (`fc*/fd*`), and link-local (`fe80*`) ranges. Both `validatePublicFetchUrl()` (initial URL) and `validateRedirectDestination()` (post-redirect URL) run this check. | ✅ Mitigated |
 
 ---
 
 ## STRIDE Findings Summary
 
 ```mermaid
-pie title Mitigation Status (29 findings)
-    "Mitigated" : 21
-    "Partial" : 7
+pie title Mitigation Status (31 findings)
+    "Mitigated" : 24
+    "Partial" : 6
     "Not Mitigated" : 1
 ```
 
@@ -208,10 +210,10 @@ pie title Mitigation Status (29 findings)
 | **Spoofing** | 5 | 4 | 1 | 0 |
 | **Tampering** | 6 | 5 | 1 | 0 |
 | **Repudiation** | 3 | 0 | 2 | 1 |
-| **Information Disclosure** | 6 | 4 | 2 | 0 |
+| **Information Disclosure** | 7 | 6 | 1 | 0 |
 | **Denial of Service** | 9 | 7 | 2 | 0 |
-| **Elevation of Privilege** | 7 | 6 | 1 | 0 |
-| **Total** | **29** | **21** | **7** | **1** |
+| **Elevation of Privilege** | 8 | 8 | 0 | 0 |
+| **Total** | **31** | **24** | **6** | **1** |
 
 ---
 
@@ -222,7 +224,6 @@ pie title Mitigation Status (29 findings)
 | ID | Finding | Recommendation |
 |----|---------|----------------|
 | R-2 | No structured audit logging | Implement application-level request logging with correlation IDs for forensic review. Consider Cloudflare Logpush or Workers Analytics Engine. |
-| E-3 | SSRF via redirect from store | Re-validate the final URL after redirect resolution. Reject responses whose final URL does not match the allowlisted host. |
 | T-6 | npm supply chain risk | Adopt `npm audit` in CI; consider lockfile review on dependency updates; evaluate Subresource Integrity or bundler hash verification for critical libs (fflate, marked, jsPDF). |
 
 ### Medium Priority
@@ -232,7 +233,6 @@ pie title Mitigation Status (29 findings)
 | S-2 | IP spoofing for rate limits | In non-Cloudflare deployments, `cf-connecting-ip` is unavailable. Document that self-hosters behind reverse proxies must configure trusted proxy headers. |
 | D-6 | Distributed rate limit bypass | Consider Cloudflare Rate Limiting (platform feature) or Durable Objects for persistent, distributed rate limit state. |
 | R-3 | Rate limit reset on restart | Migrate to persistent rate limiting (Cloudflare Durable Objects or KV) when operational hardening is prioritized. |
-| I-2 | Timing side-channel on token | Replace `===` with a constant-time comparison function for token validation. |
 | I-6 | Third-party JS library exfiltration | Implement a `Content-Security-Policy` header to restrict script sources, `connect-src`, and `default-src`. |
 
 ### Low Priority / Accepted Risk
@@ -312,6 +312,6 @@ This threat model should be reviewed:
 
 ---
 
-_Last reviewed: 2026-03-14_
-_Version: 1.0_
+_Last reviewed: 2026-03-15_
+_Version: 1.1_
 _Scope: ExtensionChecker v0.1.0 - manifest-first analysis, no persistence, no user accounts_
