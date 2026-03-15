@@ -4,6 +4,10 @@
  *
  * Manifest analysis is always performed. Store and code analysis depend on
  * what data was available at scan time.
+ *
+ * Store metadata is sourced exclusively from the Firefox Add-ons (AMO) public
+ * API. Chrome Web Store, Edge Add-ons, and Opera Add-ons do not expose public
+ * APIs for extension metadata.
  */
 
 import type { AnalysisReport } from '@extensionchecker/shared';
@@ -31,13 +35,20 @@ export function AnalysisSignals({ report }: AnalysisSignalsProps) {
   const hasStore = report.scoringBasis === 'manifest-and-store';
   const hasCode = report.limits.codeExecutionAnalysisPerformed;
 
+  // When store data IS present, the chip label identifies the specific source
+  // (Firefox Add-ons via AMO). When absent, the note explains which stores
+  // have public APIs and why Chrome / Edge / Opera cannot be included.
+  const storeChipLabel = hasStore ? 'Firefox Add-ons' : 'Store';
+
   return (
     <div className="analysis-signals" aria-label="Analysis coverage">
       <SignalChip icon="check_circle" label="Manifest" active={true} />
-      <SignalChip icon={hasStore ? 'check_circle' : 'cancel'} label="Store" active={hasStore} />
+      <SignalChip icon={hasStore ? 'check_circle' : 'cancel'} label={storeChipLabel} active={hasStore} />
       <SignalChip icon={hasCode ? 'check_circle' : 'cancel'} label="Code" active={hasCode} />
       {!hasStore && (
-        <p className="analysis-signals-note">* Excludes browser store metadata</p>
+        <p className="analysis-signals-note">
+          * Firefox Add-ons only — Chrome, Edge &amp; Opera have no public API
+        </p>
       )}
     </div>
   );

@@ -64,9 +64,12 @@ export function drawVerdictCard(
 
   const signalDotR = 3.5;
   const signalRowY = scoreY + scoreRadius + 14;
+  // When store data is present, label it by source (Firefox Add-ons / AMO).
+  // Chrome, Edge, and Opera do not expose public APIs.
+  const storeSignalLabel = hasStore ? 'Firefox Add-ons' : 'Store';
   const signals: Array<{ label: string; ok: boolean }> = [
     { label: 'Manifest', ok: true },
-    { label: 'Store', ok: hasStore },
+    { label: storeSignalLabel, ok: hasStore },
     { label: 'Code', ok: hasCode }
   ];
 
@@ -92,12 +95,12 @@ export function drawVerdictCard(
     sigX += signalWidths[i]! + SIGNAL_GAP;
   }
 
-  // If store data was absent, add a small italic note below the signals.
+  // If store data was absent, note which stores have public APIs.
   if (!hasStore) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     setTextColor(doc, MUTED_TEXT);
-    doc.text('* Excludes browser store metadata', scoreX, signalRowY + 10, { align: 'center' });
+    doc.text('* Store data: Firefox Add-ons only \u2014 Chrome, Edge & Opera have no public API', scoreX, signalRowY + 10, { align: 'center' });
   }
 
   // Verdict text — label and score come from the shared utility functions.

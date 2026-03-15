@@ -1058,6 +1058,9 @@ a.extension-identity-store:hover {
   align-items: center;
   gap: 0.55rem;
   flex-shrink: 0;
+  /* Cap width so the no-store note text cannot push verdict-main out of the card */
+  max-width: 360px;
+  min-width: 0;
 }
 
 /* "Trust" word rendered below the big overall trust donut */
@@ -1122,6 +1125,8 @@ a.extension-identity-store:hover {
   text-align: center;
   font-style: italic;
   letter-spacing: 0.02em;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .meta-grid {
