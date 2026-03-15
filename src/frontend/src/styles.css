@@ -912,8 +912,13 @@ a.extension-identity-store:hover {
 }
 
 .verdict-caution {
-  border-color: rgba(245, 158, 11, 0.42);
-  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  border-color: rgba(234, 179, 8, 0.42);
+  background: color-mix(in srgb, #eab308 14%, transparent);
+}
+
+.verdict-warning {
+  border-color: rgba(249, 115, 22, 0.45);
+  background: color-mix(in srgb, #f97316 14%, transparent);
 }
 
 .verdict-danger {
@@ -952,6 +957,7 @@ a.extension-identity-store:hover {
   align-items: baseline;
   gap: 0.15rem;
   color: var(--text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
 }
 
 .score-donut-inner strong {
@@ -977,6 +983,145 @@ a.extension-identity-store:hover {
   text-transform: uppercase;
   white-space: nowrap;
   z-index: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* ===== Composite score breakdown (3-donut layout) ===== */
+
+.score-composite {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-shrink: 0;
+}
+
+.score-composite-op {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--muted);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.score-donut-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.score-donut-label {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Small donut variant */
+.score-donut--small {
+  width: 72px;
+  height: 72px;
+}
+
+.score-donut-inner--small {
+  gap: 0.08rem;
+}
+
+.score-donut-inner--small strong {
+  font-size: 0.95rem;
+}
+
+.score-donut-inner--small span {
+  font-size: 0.6rem;
+}
+
+.score-band--small {
+  bottom: 20px;
+  font-size: 0.58rem;
+  letter-spacing: 0.03em;
+}
+
+/* Context sentence beneath the verdict explanation */
+.verdict-score-context {
+  margin-top: 0.4rem;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+/* Left column inside the verdict card: donuts on top, signal chips below */
+.verdict-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+  flex-shrink: 0;
+}
+
+/* "Trust" word rendered below the big overall trust donut */
+.score-donut-trust-word {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ===== Analysis signal chips ===== */
+
+.analysis-signals {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  width: 100%;
+  padding-top: 0.55rem;
+  border-top: 1px solid color-mix(in srgb, var(--muted) 20%, transparent);
+}
+
+.analysis-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.18rem 0.5rem 0.18rem 0.35rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.analysis-signal .material-symbols-outlined {
+  font-size: 0.88rem;
+  line-height: 1;
+}
+
+.analysis-signal--ok {
+  color: #22c55e;
+  background: color-mix(in srgb, #22c55e 16%, transparent);
+}
+
+.analysis-signal--na {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+}
+
+/* Disclaimer line when store metadata was unavailable */
+.analysis-signals-note {
+  flex-basis: 100%;
+  margin: 0.1rem 0 0;
+  font-size: 0.64rem;
+  color: var(--muted);
+  text-align: center;
+  font-style: italic;
+  letter-spacing: 0.02em;
 }
 
 .meta-grid {
@@ -1377,7 +1522,26 @@ a.extension-identity-store:hover {
 
   .verdict {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+  }
+
+  .verdict-left {
+    width: 100%;
+    align-items: center;
+  }
+
+  .verdict-main {
+    width: 100%;
+    text-align: center;
+  }
+
+  .verdict h2 {
+    justify-content: center;
+  }
+
+  .score-composite {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }
 

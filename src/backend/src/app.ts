@@ -26,10 +26,23 @@ import {
   resolveAndDownloadExtensionId
 } from './download';
 import { buildReportFromManifest } from './report';
+import { fetchAmoStoreData } from './store-metadata';
 import { registerSecurityHeaders, registerApiMiddleware } from './middleware';
 
 const MAX_ANALYZE_REQUEST_BODY_BYTES = 16 * 1024;
 const MAX_UPLOAD_REQUEST_BODY_BYTES = MAX_PACKAGE_SIZE_BYTES + (2 * 1024 * 1024);
+
+/**
+ * Extracts the Firefox add-on slug or ID from a resolved source string of the
+ * form "firefox:<slug>". Returns null for all other ecosystems.
+ */
+function extractFirefoxAddonId(sourceValue: string): string | null {
+  if (!sourceValue.startsWith('firefox:')) {
+    return null;
+  }
+  const slug = sourceValue.slice('firefox:'.length).trim();
+  return slug.length > 0 ? slug : null;
+}
 
 export type CreateAppOptions = {
   securityConfig?: SecurityConfigInput;
@@ -178,6 +191,14 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     }
 
     if (!streaming) {
+      // Kick off AMO metadata fetch in parallel with package download when the
+      // source is a Firefox add-on. Failure is non-fatal — the analysis proceeds
+      // with manifest-only scoring if AMO data is unavailable.
+      const firefoxAddonId = source.type === 'id' ? extractFirefoxAddonId(source.value) : null;
+      const amoPromise = firefoxAddonId
+        ? fetchAmoStoreData(firefoxAddonId, fetchImpl, securityConfig.upstreamTimeoutMs)
+        : Promise.resolve(null);
+
       let downloaded: DownloadedPackage;
       if (downloadedFromId) {
         downloaded = downloadedFromId;
@@ -204,9 +225,11 @@ export function createApp(options: CreateAppOptions = {}): Hono {
         return context.json({ error: message }, 400);
       }
 
+      const amoStoreData = await amoPromise;
+
       let reportResult: ReturnType<typeof buildReportFromManifest>;
       try {
-        reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength);
+        reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength, amoStoreData);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Report generation failed.';
         return context.json({ error: message }, 500);
@@ -224,6 +247,14 @@ export function createApp(options: CreateAppOptions = {}): Hono {
     const capturedPackageKindHint = packageKindHint;
     const capturedSource = source;
     const capturedDownloadedFromId = downloadedFromId;
+
+    // Start the AMO metadata fetch now so it runs in parallel with SSE download.
+    const capturedFirefoxAddonId = capturedSource.type === 'id'
+      ? extractFirefoxAddonId(capturedSource.value)
+      : null;
+    const capturedAmoPromise = capturedFirefoxAddonId
+      ? fetchAmoStoreData(capturedFirefoxAddonId, fetchImpl, securityConfig.upstreamTimeoutMs)
+      : Promise.resolve(null);
 
     return streamSSE(context, async (stream) => {
       const emitProgress = async (step: AnalysisProgressStep, message: string, percent: number): Promise<void> => {
@@ -268,7 +299,8 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
         await emitProgress('analyzing', 'Analyzing manifest and permissions…', 80);
 
-        const reportResult = buildReportFromManifest(manifestRaw, capturedSource, downloaded.bytes.byteLength);
+        const amoStoreData = await capturedAmoPromise;
+        const reportResult = buildReportFromManifest(manifestRaw, capturedSource, downloaded.bytes.byteLength, amoStoreData);
         if (!reportResult.ok) {
           await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Internal report contract violation.' }) });
           return;

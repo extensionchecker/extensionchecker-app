@@ -62,6 +62,25 @@ describe('analyzeManifest', () => {
     expect(report.riskSignals.length).toBe(0);
   });
 
+  it('populates permissionsScore equal to the manifest-only score', () => {
+    const report = analyzeManifest(
+      {
+        name: 'Score Check Extension',
+        version: '1.0.0',
+        manifest_version: 3,
+        permissions: ['cookies'],
+        host_permissions: ['<all_urls>']
+      },
+      {
+        type: 'url',
+        value: 'https://example.com/score-check.zip'
+      }
+    );
+
+    expect(report.permissionsScore).toBeDefined();
+    expect(report.permissionsScore).toBe(report.score.value);
+  });
+
   it('adds externally connectable signal when manifest exposes external surfaces', () => {
     const report = analyzeManifest(
       {

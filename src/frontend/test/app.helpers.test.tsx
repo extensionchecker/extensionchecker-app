@@ -116,50 +116,50 @@ async function submitUrlAndWaitForReport(url: string) {
 
 describe('App helper function coverage', () => {
   describe('score bands and verdict labels via rendered output', () => {
-    it('renders Low score band for score <= 20', async () => {
+    it('renders High trust band for score <= 20', async () => {
       mockFetchWithReport(buildReport({
         score: { value: 15, severity: 'low', rationale: 'test' },
         riskSignals: []
       }));
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
-      expect(screen.getByText('Low')).toBeInTheDocument();
-      expect(screen.getByText('Likely Low Risk')).toBeInTheDocument();
+      expect(screen.getByText('High')).toBeInTheDocument();
+      expect(screen.getByText('High Trust')).toBeInTheDocument();
     });
 
-    it('renders Low / Medium score band for score <= 40', async () => {
+    it('renders Med / High trust band for score <= 40', async () => {
       mockFetchWithReport(buildReport({
         score: { value: 35, severity: 'low', rationale: 'test' }
       }));
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
-      expect(screen.getByText('Low / Medium')).toBeInTheDocument();
-      expect(screen.getByText('Low Risk, Review Recommended')).toBeInTheDocument();
+      expect(screen.getByText('Med / High')).toBeInTheDocument();
+      expect(screen.getByText('Strong Trust')).toBeInTheDocument();
     });
 
-    it('renders Medium score band for score <= 60', async () => {
+    it('renders Medium trust band for score <= 60', async () => {
       mockFetchWithReport(buildReport({
         score: { value: 55, severity: 'medium', rationale: 'test' }
       }));
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
       expect(screen.getByText('Medium')).toBeInTheDocument();
-      expect(screen.getByText('Use Caution')).toBeInTheDocument();
+      expect(screen.getByText('Moderate Trust')).toBeInTheDocument();
     });
 
-    it('renders Medium / High score band for score <= 80', async () => {
+    it('renders Low / Med trust band for score <= 80', async () => {
       mockFetchWithReport(buildReport({
         score: { value: 75, severity: 'high', rationale: 'test' }
       }));
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
-      expect(screen.getByText('Medium / High')).toBeInTheDocument();
-      expect(screen.getByText('Dangerous')).toBeInTheDocument();
+      expect(screen.getByText('Low / Med')).toBeInTheDocument();
+      expect(screen.getByText('Limited Trust')).toBeInTheDocument();
     });
 
-    it('renders High score band for score > 80 and critical severity', async () => {
+    it('renders Low trust band for score > 80 and critical severity', async () => {
       mockFetchWithReport(buildReport({
         score: { value: 90, severity: 'critical', rationale: 'test' }
       }));
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
-      expect(screen.getByText('High')).toBeInTheDocument();
-      expect(screen.getByText('High Danger')).toBeInTheDocument();
+      expect(screen.getByText('Low')).toBeInTheDocument();
+      expect(screen.getByText('Low Trust')).toBeInTheDocument();
     });
   });
 
@@ -168,9 +168,9 @@ describe('App helper function coverage', () => {
       mockFetchWithReport(buildReport());
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
       fireEvent.click(screen.getByRole('tab', { name: /Findings/i }));
-      expect(screen.getByText('Lower-impact capability, but still relevant to overall trust.')).toBeInTheDocument();
-      expect(screen.getByText(/Meaningful capability that can affect privacy/)).toBeInTheDocument();
-      expect(screen.getByText(/Potentially dangerous capability/)).toBeInTheDocument();
+      expect(screen.getByText('Lower-impact capability, but still relevant to the overall access footprint.')).toBeInTheDocument();
+      expect(screen.getByText(/Meaningful capability that may affect privacy/)).toBeInTheDocument();
+      expect(screen.getByText(/High-impact capability/)).toBeInTheDocument();
     });
   });
 

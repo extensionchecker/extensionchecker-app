@@ -2,8 +2,12 @@ import type { Severity } from '@extensionchecker/shared';
 import type { Tone, ThemePreference, PhaseStatus } from '../types';
 
 export function toneForSeverity(severity: Severity): Tone {
-  if (severity === 'critical' || severity === 'high') {
+  if (severity === 'critical') {
     return 'danger';
+  }
+
+  if (severity === 'high') {
+    return 'warning';
   }
 
   if (severity === 'medium') {
@@ -13,13 +17,51 @@ export function toneForSeverity(severity: Severity): Tone {
   return 'good';
 }
 
+/** Human-readable access tier matching the 4-band scoring system. */
 export function scoreBand(score: number): string {
+  if (score <= 25) {
+    return 'Minimal';
+  }
+
+  if (score <= 50) {
+    return 'Moderate';
+  }
+
+  if (score <= 75) {
+    return 'Broad';
+  }
+
+  return 'Complete';
+}
+
+/** RAGB colour for a capability score: green → yellow → orange → red (low = safe). */
+export function scoreColor(score: number): string {
+  if (score <= 25) {
+    return '#22c55e'; // green
+  }
+
+  if (score <= 50) {
+    return '#eab308'; // yellow
+  }
+
+  if (score <= 75) {
+    return '#f97316'; // orange
+  }
+
+  return '#ef4444'; // red
+}
+
+/**
+ * Human-readable trust tier across 5 levels.
+ * Displayed on the Store Trust donut where high = trustworthy.
+ */
+export function trustScoreBand(score: number): string {
   if (score <= 20) {
     return 'Low';
   }
 
   if (score <= 40) {
-    return 'Low / Medium';
+    return 'Low / Med';
   }
 
   if (score <= 60) {
@@ -27,22 +69,34 @@ export function scoreBand(score: number): string {
   }
 
   if (score <= 80) {
-    return 'Medium / High';
+    return 'Med / High';
   }
 
   return 'High';
 }
 
-export function scoreColor(score: number): string {
-  if (score <= 25) {
-    return '#22c55e';
+/**
+ * Inverted colour scale for store trust: red → orange → yellow → green
+ * (low trust = red, high trust = green).
+ */
+export function trustScoreColor(score: number): string {
+  if (score <= 20) {
+    return '#ef4444'; // red — low trust
   }
 
-  if (score <= 50) {
-    return '#f59e0b';
+  if (score <= 40) {
+    return '#f97316'; // orange
   }
 
-  return '#ef4444';
+  if (score <= 60) {
+    return '#eab308'; // yellow
+  }
+
+  if (score <= 80) {
+    return '#84cc16'; // lime green
+  }
+
+  return '#22c55e'; // green — high trust
 }
 
 export function formatBytes(bytes: number): string {
@@ -62,8 +116,12 @@ export function iconForTone(tone: Tone): string {
     return 'dangerous';
   }
 
-  if (tone === 'caution') {
+  if (tone === 'warning') {
     return 'warning';
+  }
+
+  if (tone === 'caution') {
+    return 'info';
   }
 
   if (tone === 'good') {

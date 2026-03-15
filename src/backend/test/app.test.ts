@@ -198,10 +198,12 @@ describe('backend app', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // Expect two fetch calls: one to AMO metadata API (parallel), one to download the XPI.
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
 
-    const firstCallUrl = String(fetchSpy.mock.calls[0]?.[0]);
-    expect(firstCallUrl).toContain('addons.mozilla.org/firefox/downloads/latest/ublock-origin');
+    const allUrls = fetchSpy.mock.calls.map((args) => String((args as unknown[])[0]));
+    expect(allUrls.some((url) => url.includes('addons.mozilla.org/firefox/downloads/latest/ublock-origin'))).toBe(true);
+    expect(allUrls.some((url) => url.includes('addons.mozilla.org/api/v5/addons/addon/'))).toBe(true);
   });
 
   it('falls back from Chrome to Edge for an ambiguous raw Chromium ID', async () => {

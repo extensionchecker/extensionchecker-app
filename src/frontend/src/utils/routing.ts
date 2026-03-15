@@ -3,7 +3,8 @@ import type { AppRoute } from '../types';
 const ROUTE_PATHS: Record<string, AppRoute> = {
   '/results': 'results',
   '/terms': 'terms',
-  '/privacy': 'privacy'
+  '/privacy': 'privacy',
+  '/faq': 'faq'
 };
 
 export function routeFromPath(pathname: string): AppRoute {
@@ -20,5 +21,6 @@ export function pathForRoute(route: AppRoute): string {
   if (route === 'results') return '/results';
   if (route === 'terms') return '/terms';
   if (route === 'privacy') return '/privacy';
+  if (route === 'faq') return '/faq';
   return '/';
 }

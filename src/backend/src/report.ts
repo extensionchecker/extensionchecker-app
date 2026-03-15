@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { analyzeManifest } from '@extensionchecker/engine';
+import { analyzeManifest, computeStoreTrustScore, computeCompositeScore, toSeverity } from '@extensionchecker/engine';
 import { AnalysisReportSchema, type StoreMetadata } from '@extensionchecker/shared';
 import { ManifestSchema, type ReportSource } from './schemas';
+import type { AmoStoreData } from './store-metadata';
 
 export function extractStoreMetadata(manifest: z.infer<typeof ManifestSchema>, packageSizeBytes: number, storeUrl: string | null): StoreMetadata {
   const meta: StoreMetadata = {};
@@ -85,7 +86,12 @@ export function resolveStoreUrl(source: ReportSource): string | null {
   return null;
 }
 
-export function buildReportFromManifest(manifestRaw: unknown, source: ReportSource, packageSizeBytes: number) {
+export function buildReportFromManifest(
+  manifestRaw: unknown,
+  source: ReportSource,
+  packageSizeBytes: number,
+  amoStoreData?: AmoStoreData | null
+) {
   const parsedManifest = ManifestSchema.safeParse(manifestRaw);
   if (!parsedManifest.success) {
     return {
@@ -102,7 +108,46 @@ export function buildReportFromManifest(manifestRaw: unknown, source: ReportSour
   const report = analyzeManifest(parsedManifest.data, source);
   const storeUrl = resolveStoreUrl(source);
   const storeMetadata = extractStoreMetadata(parsedManifest.data, packageSizeBytes, storeUrl);
-  const enrichedReport = { ...report, storeMetadata };
+
+  // Merge live store data from AMO when available.
+  if (amoStoreData) {
+    storeMetadata.rating = amoStoreData.rating;
+    storeMetadata.ratingCount = amoStoreData.ratingCount;
+    storeMetadata.userCount = amoStoreData.userCount;
+  }
+
+  // Compute composite score when store trust signals (rating or user count) are present.
+  const permissionsScore = report.permissionsScore ?? report.score.value;
+  const storeTrustScore = computeStoreTrustScore(storeMetadata.rating, storeMetadata.userCount);
+
+  let overallScore: number;
+  let scoringBasis: 'manifest-only' | 'manifest-and-store';
+
+  if (storeTrustScore !== null) {
+    overallScore = computeCompositeScore(permissionsScore, storeTrustScore);
+    scoringBasis = 'manifest-and-store';
+  } else {
+    overallScore = permissionsScore;
+    scoringBasis = 'manifest-only';
+  }
+
+  const overallSeverity = toSeverity(overallScore);
+
+  const enrichedReport = {
+    ...report,
+    score: {
+      value: overallScore,
+      severity: overallSeverity,
+      rationale: scoringBasis === 'manifest-and-store'
+        ? 'Score combines the capability footprint from the manifest with store trust signals (rating and user count).'
+        : 'Score reflects the capability footprint declared in the extension manifest. No store trust data was available.'
+    },
+    permissionsScore,
+    ...(storeTrustScore !== null ? { storeTrustScore } : {}),
+    scoringBasis,
+    storeMetadata
+  };
+
   const validatedReport = AnalysisReportSchema.safeParse(enrichedReport);
   if (!validatedReport.success) {
     return {

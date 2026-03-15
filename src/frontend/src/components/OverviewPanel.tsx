@@ -1,8 +1,11 @@
 import type { AnalysisReport } from '@extensionchecker/shared';
 import type { PermissionDetail } from '../permission-explainer';
-import { toneForSeverity, scoreColor, scoreBand, iconForTone } from '../utils/formatting';
-import { verdictLabel, verdictExplanation } from '../utils/verdict';
+import { toneForSeverity, iconForTone } from '../utils/formatting';
+import { verdictLabel, verdictExplanation, overallScoreContext } from '../utils/verdict';
+import { overallTrustScore, trustSignalExplanation } from '../utils/trust-signal';
 import { sourceStoreLabel } from '../utils/report-source';
+import { ScoreDonut } from './ScoreDonut';
+import { AnalysisSignals } from './AnalysisSignals';
 
 interface OverviewPanelProps {
   report: AnalysisReport;
@@ -11,35 +14,57 @@ interface OverviewPanelProps {
 }
 
 export function OverviewPanel({ report, permissionDetails, listingUrl }: OverviewPanelProps) {
+  const tone = toneForSeverity(report.score.severity);
+
+  // The small capability donut always shows the raw permissions risk.
+  const capabilityScore = report.permissionsScore ?? report.score.value;
+
+  // The big overall donut always shows the overall trust (complement of composite risk).
+  const trustScore = overallTrustScore(report);
+
+  // Include the store trust donut when both the scoring basis and score are present.
+  const hasStoreTrust =
+    report.scoringBasis === 'manifest-and-store' &&
+    report.storeTrustScore !== undefined;
+
+  // Human-readable explanation of what the store signals say (may be null).
+  const signalNote = trustSignalExplanation(report);
+
   return (
     <section id="result-panel-overview" role="tabpanel" aria-labelledby="result-tab-overview" className="result-panel">
-      <div className={`verdict verdict-${toneForSeverity(report.score.severity)}`}>
-        <div
-          className="score-donut"
-          style={{
-            ['--score' as string]: report.score.value,
-            ['--score-color' as string]: scoreColor(report.score.value)
-          }}
-        >
-          <div className="score-donut-inner">
-            <strong>{report.score.value}</strong>
-            <span>/100</span>
+      <div className={`verdict verdict-${tone}`}>
+        {/* Donut column: breakdown on top, analysis signal chips below */}
+        <div className="verdict-left">
+          <div className="score-composite" aria-label="Score breakdown">
+            <ScoreDonut score={capabilityScore} small label="Capability" />
+            {hasStoreTrust && (
+              <>
+                <span className="score-composite-op" aria-hidden="true">+</span>
+                <ScoreDonut score={report.storeTrustScore!} small label="Store Trust" variant="trust" />
+              </>
+            )}
+            <span className="score-composite-op" aria-hidden="true">=</span>
+            <ScoreDonut score={trustScore} variant="trust" />
           </div>
-          <div className="score-band">{scoreBand(report.score.value)}</div>
+          <AnalysisSignals report={report} />
         </div>
 
         <div className="verdict-main">
-          <p className="verdict-label">Overall Verdict</p>
+          <p className="verdict-label">Overall Trust</p>
           <h2>
-            <span className={`material-symbols-outlined tone-icon ${toneForSeverity(report.score.severity)}`} aria-hidden="true">
-              {iconForTone(toneForSeverity(report.score.severity))}
+            <span className={`material-symbols-outlined tone-icon ${tone}`} aria-hidden="true">
+              {iconForTone(tone)}
             </span>
             {verdictLabel(report)}
           </h2>
           <p className="verdict-score">
-            Risk score <strong>{report.score.value}/100</strong> ({report.score.severity})
+            Trust score <strong>{trustScore}/100</strong>
           </p>
           <p>{verdictExplanation(report)}</p>
+          {signalNote !== null && (
+            <p className="verdict-score-context">{signalNote}</p>
+          )}
+          <p className="verdict-score-context">{overallScoreContext(report)}</p>
         </div>
       </div>
 
@@ -66,8 +91,8 @@ export function OverviewPanel({ report, permissionDetails, listingUrl }: Overvie
           <p>{report.permissions.hostPermissions.length} host scopes</p>
         </article>
         <article className="info-card caution">
-          <h3>Review Signals</h3>
-          <p>{report.riskSignals.length} risk signals detected</p>
+          <h3>Capability Signals</h3>
+          <p>{report.riskSignals.length} signals detected</p>
           <p>{report.summary}</p>
         </article>
       </div>

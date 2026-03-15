@@ -74,6 +74,8 @@ export const StoreMetadataSchema = z.object({
   screenshots: z.array(z.string()).optional()
 });
 
+export const ScoringBasisSchema = z.enum(['manifest-only', 'manifest-and-store']);
+
 export const AnalysisReportSchema = z.object({
   reportVersion: z.literal('1.0.0'),
   analyzedAt: z.string().datetime(),
@@ -82,9 +84,12 @@ export const AnalysisReportSchema = z.object({
   permissions: PermissionSummarySchema,
   riskSignals: z.array(RiskSignalSchema),
   score: RiskScoreSchema,
+  permissionsScore: z.number().int().min(0).max(100).optional(),
+  storeTrustScore: z.number().int().min(0).max(100).optional(),
   summary: z.string().min(1),
   limits: AnalysisLimitsSchema,
-  storeMetadata: StoreMetadataSchema.optional()
+  storeMetadata: StoreMetadataSchema.optional(),
+  scoringBasis: ScoringBasisSchema.optional()
 });
 
 export const AnalysisProgressStepSchema = z.enum([
@@ -110,5 +115,6 @@ export type RiskScore = z.infer<typeof RiskScoreSchema>;
 export type ExtensionMetadata = z.infer<typeof ExtensionMetadataSchema>;
 export type StoreMetadata = z.infer<typeof StoreMetadataSchema>;
 export type AnalysisReport = z.infer<typeof AnalysisReportSchema>;
+export type ScoringBasis = z.infer<typeof ScoringBasisSchema>;
 export type AnalysisProgressStep = z.infer<typeof AnalysisProgressStepSchema>;
 export type AnalysisProgressEvent = z.infer<typeof AnalysisProgressEventSchema>;

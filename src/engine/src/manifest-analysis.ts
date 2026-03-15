@@ -30,8 +30,8 @@ export function analyzeManifest(manifest: ManifestLike, source: AnalysisSource):
   const severity = toSeverity(cappedScore);
 
   const summary = riskSignals.length === 0
-    ? 'Low declared risk based on manifest-only review. No high-impact permissions or broad host access were found.'
-    : `Detected ${riskSignals.length} manifest-derived risk signal(s). Highest observed severity: ${severity}.`;
+    ? 'No significant capability signals were found in the manifest. This extension requests minimal browser access.'
+    : `Detected ${riskSignals.length} manifest-derived capability signal(s). Highest observed severity: ${severity}.`;
 
   return {
     reportVersion: '1.0.0',
@@ -51,8 +51,9 @@ export function analyzeManifest(manifest: ManifestLike, source: AnalysisSource):
     score: {
       value: cappedScore,
       severity,
-      rationale: 'Score is computed by deterministic manifest permission and capability rules.'
+      rationale: 'Score reflects the capability footprint declared in the extension manifest.'
     },
+    permissionsScore: cappedScore,
     summary,
     limits: {
       codeExecutionAnalysisPerformed: false,

@@ -190,4 +190,63 @@ describe('AnalysisReportSchema', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('accepts a composite report with scoringBasis, permissionsScore, and storeTrustScore', () => {
+    const result = AnalysisReportSchema.safeParse({
+      reportVersion: '1.0.0',
+      analyzedAt: '2026-03-11T00:00:00.000Z',
+      source: {
+        type: 'id',
+        value: 'firefox:ublock-origin'
+      },
+      metadata: {
+        name: 'uBlock Origin',
+        version: '1.60.0',
+        manifestVersion: 2
+      },
+      permissions: {
+        requestedPermissions: ['webRequest', 'tabs'],
+        optionalPermissions: [],
+        hostPermissions: ['<all_urls>']
+      },
+      riskSignals: [],
+      score: {
+        value: 34,
+        severity: 'medium',
+        rationale: 'Composite from manifest and store signals.'
+      },
+      permissionsScore: 88,
+      storeTrustScore: 95,
+      scoringBasis: 'manifest-and-store',
+      summary: 'Composite score, store trust applied.',
+      limits: {
+        codeExecutionAnalysisPerformed: false,
+        notes: ['Manifest-first analysis.']
+      }
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scoringBasis).toBe('manifest-and-store');
+      expect(result.data.permissionsScore).toBe(88);
+      expect(result.data.storeTrustScore).toBe(95);
+    }
+  });
+
+  it('rejects an invalid scoringBasis value', () => {
+    const result = AnalysisReportSchema.safeParse({
+      reportVersion: '1.0.0',
+      analyzedAt: '2026-03-11T00:00:00.000Z',
+      source: { type: 'url', value: 'https://example.com/ext.zip' },
+      metadata: { name: 'Ext', version: '1.0', manifestVersion: 3 },
+      permissions: { requestedPermissions: [], optionalPermissions: [], hostPermissions: [] },
+      riskSignals: [],
+      score: { value: 10, severity: 'low', rationale: 'low' },
+      scoringBasis: 'unknown-basis',
+      summary: 'test',
+      limits: { codeExecutionAnalysisPerformed: false, notes: [] }
+    });
+
+    expect(result.success).toBe(false);
+  });
 });

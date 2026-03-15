@@ -56,32 +56,46 @@ export function severityOrder(signal: RiskSignal): number {
   }
 }
 
+/** RAGB colour for a capability/risk score (low = safe). */
 export function scoreColor(score: number): RGB {
   if (score <= 25) {
-    return [44, 182, 87];
+    return [44, 182, 87]; // green
   }
 
   if (score <= 50) {
-    return [235, 172, 71];
+    return [235, 172, 71]; // yellow
   }
 
-  return [229, 87, 87];
+  if (score <= 75) {
+    return [249, 115, 22]; // orange
+  }
+
+  return [239, 68, 68]; // red
 }
 
-export function verdictLabel(report: AnalysisReport): string {
-  if (report.score.severity === 'critical') {
-    return 'High Danger';
+/**
+ * Inverted colour scale for trust scores — mirrors trustScoreColor() from
+ * formatting.ts but returns RGB tuples for jsPDF.
+ * High trust (near 100) = green; low trust (near 0) = red.
+ */
+export function trustScoreColorRgb(score: number): RGB {
+  if (score <= 20) {
+    return [239, 68, 68]; // red — low trust
   }
 
-  if (report.score.severity === 'high') {
-    return 'Dangerous';
+  if (score <= 40) {
+    return [249, 115, 22]; // orange
   }
 
-  if (report.score.severity === 'medium') {
-    return 'Use Caution';
+  if (score <= 60) {
+    return [234, 179, 8]; // yellow
   }
 
-  return report.riskSignals.length === 0 ? 'Likely Low Risk' : 'Low Risk (Review)';
+  if (score <= 80) {
+    return [132, 204, 22]; // lime green
+  }
+
+  return [34, 197, 94]; // green — high trust
 }
 
 export function statusColor(status: 'Complete' | 'Not Available'): { fill: RGB; text: RGB } {

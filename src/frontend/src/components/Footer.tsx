@@ -16,6 +16,8 @@ export function Footer({ appVersion, onNavigate }: FooterProps) {
         <span className="footer-sep" aria-hidden="true">&middot;</span>
         <a href="/privacy" onClick={(e) => { e.preventDefault(); onNavigate('privacy'); }}>Privacy</a>
         <span className="footer-sep" aria-hidden="true">&middot;</span>
+        <a href="/faq" onClick={(e) => { e.preventDefault(); onNavigate('faq'); }}>FAQ</a>
+        <span className="footer-sep" aria-hidden="true">&middot;</span>
         <a href={GITHUB_REPO_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
         {appVersion ? (
           <>

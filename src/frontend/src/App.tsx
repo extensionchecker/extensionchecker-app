@@ -14,6 +14,7 @@ import { ResultsPage } from './pages/ResultsPage';
 import { MarkdownPage } from './pages/MarkdownPage';
 import termsMarkdown from '@docs/TERMS.md?raw';
 import privacyMarkdown from '@docs/PRIVACY.md?raw';
+import faqMarkdown from '@docs/FAQ.md?raw';
 
 export function App() {
   const appVersion = useAppVersion();
@@ -232,6 +233,8 @@ export function App() {
           <MarkdownPage markdown={termsMarkdown} onBack={() => navigateTo('scan')} />
         ) : route === 'privacy' ? (
           <MarkdownPage markdown={privacyMarkdown} onBack={() => navigateTo('scan')} />
+        ) : route === 'faq' ? (
+          <MarkdownPage markdown={faqMarkdown} onBack={() => navigateTo('scan')} />
         ) : route === 'scan' ? (
           <ScanPage
             textInput={textInput}
