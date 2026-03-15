@@ -1,8 +1,11 @@
 import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { AnalysisProgressStep } from '@extensionchecker/shared';
-import { MAX_ANALYZE_REQUEST_BODY_BYTES, MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES } from './constants';
+import { MAX_ANALYZE_REQUEST_BODY_BYTES, MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES, MAX_CODE_SCAN_BYTES_TOTAL, MAX_CODE_SCAN_BYTES_PER_FILE, MAX_CODE_SCAN_FILES, CODE_SCAN_WALL_CLOCK_BUDGET_MS } from './constants';
 import { type PackageKind, detectPackageKind, extractManifestFromPackage } from './archive';
+import { extractJsFilesFromPackage } from './js-extractor';
+import { scanJsFile } from '@extensionchecker/engine';
+import type { CodeScanResult } from '@extensionchecker/engine';
 import { resolveExtensionIdCandidates, type ResolvedExtensionId } from './id-resolution';
 import { resolveListingUrlToId } from './listing-url';
 import { isSafariAppStoreHost, validatePublicFetchUrl } from './url-safety';
@@ -20,6 +23,49 @@ import { buildReportFromManifest } from './report';
 import { dispatchStoreDataFetch } from './scrapers/index';
 import { wantsEventStream } from './middleware';
 import type { RouteDeps } from './route-deps';
+
+const JS_EXTRACTION_OPTIONS = {
+  maxTotalBytes: MAX_CODE_SCAN_BYTES_TOTAL,
+  maxFileBytes: MAX_CODE_SCAN_BYTES_PER_FILE,
+  maxFiles: MAX_CODE_SCAN_FILES,
+  wallClockBudgetMs: CODE_SCAN_WALL_CLOCK_BUDGET_MS
+} as const;
+
+/**
+ * Runs the lite JS code scan over a downloaded package.
+ * Returns a CodeScanResult that can be passed to buildReportFromManifest.
+ * Errors are caught and surfaced as a zero-findings result to keep the
+ * main analysis pipeline intact even if scanning fails.
+ */
+function runCodeScan(bytes: Uint8Array, packageKind: PackageKind, rawManifest: unknown): CodeScanResult {
+  try {
+    const extraction = extractJsFilesFromPackage(bytes, packageKind, rawManifest, JS_EXTRACTION_OPTIONS);
+    const findings = extraction.files.flatMap((file) => scanJsFile(file));
+    const bytesScanned = extraction.files.reduce(
+      (sum, f) => sum + new TextEncoder().encode(f.content).byteLength,
+      0
+    );
+
+    return {
+      mode: 'lite',
+      findings,
+      filesScanned: extraction.files.length,
+      filesSkipped: extraction.filesSkipped,
+      bytesScanned,
+      budgetExhausted: extraction.budgetExhausted
+    };
+  } catch (error) {
+    console.error('Code scan failed (non-fatal):', error);
+    return {
+      mode: 'lite',
+      findings: [],
+      filesScanned: 0,
+      filesSkipped: 0,
+      bytesScanned: 0,
+      budgetExhausted: false
+    };
+  }
+}
 
 /**
  * Registers the POST /api/analyze route onto the given Hono app.
@@ -196,9 +242,11 @@ export function registerAnalyzeRoute(app: Hono, deps: RouteDeps): void {
 
       const storeResult = await storeDataPromise;
 
+      const codeScanResult = runCodeScan(new Uint8Array(downloaded.bytes), packageKind, manifestRaw);
+
       let reportResult: ReturnType<typeof buildReportFromManifest>;
       try {
-        reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength, storeResult);
+        reportResult = buildReportFromManifest(manifestRaw, source, downloaded.bytes.byteLength, storeResult, codeScanResult);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Report generation failed.';
         return context.json({ error: message }, 500);
@@ -300,7 +348,8 @@ export function registerAnalyzeRoute(app: Hono, deps: RouteDeps): void {
         await emitProgress('analyzing', 'Analyzing manifest and permissions…', 80);
 
         const storeResult = await capturedStoreDataPromise;
-        const reportResult = buildReportFromManifest(manifestRaw, effectiveSource, downloaded.bytes.byteLength, storeResult);
+        const codeScanResult = runCodeScan(new Uint8Array(downloaded.bytes), packageKind, manifestRaw);
+        const reportResult = buildReportFromManifest(manifestRaw, effectiveSource, downloaded.bytes.byteLength, storeResult, codeScanResult);
         if (!reportResult.ok) {
           await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Internal report contract violation.' }) });
           return;

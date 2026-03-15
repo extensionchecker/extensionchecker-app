@@ -197,7 +197,7 @@ describe('App helper function coverage', () => {
       }));
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
 
-      fireEvent.click(screen.getByRole('tab', { name: /Metadata/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /Meta/i }));
 
       expect(screen.getByText('Extension Metadata')).toBeInTheDocument();
       expect(screen.getByText('HTE')).toBeInTheDocument();
@@ -215,7 +215,7 @@ describe('App helper function coverage', () => {
       mockFetchWithReport(buildReport());
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
 
-      fireEvent.click(screen.getByRole('tab', { name: /Metadata/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /Meta/i }));
       expect(screen.getByText('Extension Metadata')).toBeInTheDocument();
       expect(screen.getByText('No developer information available in the manifest.')).toBeInTheDocument();
     });
@@ -731,13 +731,50 @@ describe('App helper function coverage', () => {
       mockFetchWithReport(buildReport({
         limits: {
           codeExecutionAnalysisPerformed: true,
+          codeAnalysisMode: 'lite',
+          codeAnalysisFilesScanned: 3,
+          codeAnalysisBytesScanned: 2048,
+          codeAnalysisFilesSkipped: 0,
+          codeAnalysisBudgetExhausted: false,
           notes: ['Full analysis.']
         }
       }));
       await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
 
       fireEvent.click(screen.getByRole('tab', { name: /Phases/i }));
-      expect(screen.getByText('Source and behavior-level analysis was executed.', { exact: false })).toBeInTheDocument();
+      // Phase 3 detail now describes the lite code scan result
+      expect(screen.getByText(/Complete.*Lite pattern-based code scan analyzed 3 JS file/i)).toBeInTheDocument();
+    });
+
+    it('renders code analysis as partial when budget was exhausted', async () => {
+      mockFetchWithReport(buildReport({
+        limits: {
+          codeExecutionAnalysisPerformed: true,
+          codeAnalysisMode: 'lite',
+          codeAnalysisFilesScanned: 5,
+          codeAnalysisBytesScanned: 500_000,
+          codeAnalysisFilesSkipped: 10,
+          codeAnalysisBudgetExhausted: true,
+          notes: []
+        }
+      }));
+      await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
+
+      fireEvent.click(screen.getByRole('tab', { name: /Phases/i }));
+      expect(screen.getByText(/Partial.*Analyzed 5 JS file/i)).toBeInTheDocument();
+    });
+
+    it('renders code analysis as not-available when flag is false', async () => {
+      mockFetchWithReport(buildReport({
+        limits: {
+          codeExecutionAnalysisPerformed: false,
+          notes: []
+        }
+      }));
+      await submitUrlAndWaitForReport('https://chromewebstore.google.com/detail/test-ext/abcdefghijklmnopabcdefghijklmnop');
+
+      fireEvent.click(screen.getByRole('tab', { name: /Phases/i }));
+      expect(screen.getByText(/No JavaScript files were found/i)).toBeInTheDocument();
     });
   });
 });

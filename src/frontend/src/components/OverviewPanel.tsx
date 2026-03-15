@@ -1,10 +1,11 @@
 import type { AnalysisReport } from '@extensionchecker/shared';
 import type { PermissionDetail } from '../permission-explainer';
-import { toneForSeverity, iconForTone } from '../utils/formatting';
-import { verdictLabel, verdictExplanation, overallScoreContext } from '../utils/verdict';
-import { overallTrustScore, trustSignalExplanation } from '../utils/trust-signal';
+import { toneForTrustScore, iconForTone } from '../utils/formatting';
+import { verdictLabel, verdictExplanation } from '../utils/verdict';
+import { overallTrustScore } from '../utils/trust-signal';
 import { sourceStoreLabel } from '../utils/report-source';
 import { ScoreDonut } from './ScoreDonut';
+import { FindingsSeverityDonut } from './FindingsSeverityDonut';
 import { AnalysisSignals } from './AnalysisSignals';
 
 interface OverviewPanelProps {
@@ -14,41 +15,20 @@ interface OverviewPanelProps {
 }
 
 export function OverviewPanel({ report, permissionDetails, listingUrl }: OverviewPanelProps) {
-  const tone = toneForSeverity(report.score.severity);
+  const trustScore = overallTrustScore(report);
+  const tone = toneForTrustScore(trustScore);
 
   // The small capability donut always shows the raw permissions risk.
   const capabilityScore = report.permissionsScore ?? report.score.value;
-
-  // The big overall donut always shows the overall trust (complement of composite risk).
-  const trustScore = overallTrustScore(report);
-
-  // Include the store trust donut when both the scoring basis and score are present.
   const hasStoreTrust =
     report.scoringBasis === 'manifest-and-store' &&
     report.storeTrustScore !== undefined;
 
   // Human-readable explanation of what the store signals say (may be null).
-  const signalNote = trustSignalExplanation(report);
-
   return (
     <section id="result-panel-overview" role="tabpanel" aria-labelledby="result-tab-overview" className="result-panel">
       <div className={`verdict verdict-${tone}`}>
-        {/* Donut column: breakdown on top, analysis signal chips below */}
-        <div className="verdict-left">
-          <div className="score-composite" aria-label="Score breakdown">
-            <ScoreDonut score={capabilityScore} small label="Capability" />
-            {hasStoreTrust && (
-              <>
-                <span className="score-composite-op" aria-hidden="true">+</span>
-                <ScoreDonut score={report.storeTrustScore!} small label="Store Trust" variant="trust" />
-              </>
-            )}
-            <span className="score-composite-op" aria-hidden="true">=</span>
-            <ScoreDonut score={trustScore} variant="trust" />
-          </div>
-          <AnalysisSignals report={report} />
-        </div>
-
+        {/* Row 1: trust headline and brief explanation */}
         <div className="verdict-main">
           <p className="verdict-label">Overall Trust</p>
           <h2>
@@ -61,10 +41,24 @@ export function OverviewPanel({ report, permissionDetails, listingUrl }: Overvie
             Trust score <strong>{trustScore}/100</strong>
           </p>
           <p>{verdictExplanation(report)}</p>
-          {signalNote !== null && (
-            <p className="verdict-score-context">{signalNote}</p>
-          )}
-          <p className="verdict-score-context">{overallScoreContext(report)}</p>
+        </div>
+
+        {/* Row 2: Manifest · Store · Code donuts feed into the Trust output donut */}
+        <div className="verdict-donuts">
+          <div className="score-composite" aria-label="Score breakdown">
+            <ScoreDonut score={capabilityScore} small label="Manifest" />
+            {hasStoreTrust && (
+              <>
+                <span className="score-composite-op" aria-hidden="true">+</span>
+                <ScoreDonut score={report.storeTrustScore!} small label="Store" variant="trust" />
+              </>
+            )}
+            <span className="score-composite-op" aria-hidden="true">+</span>
+            <FindingsSeverityDonut signals={report.riskSignals} />
+            <span className="score-composite-op" aria-hidden="true">=</span>
+            <ScoreDonut score={trustScore} variant="trust" />
+          </div>
+          <AnalysisSignals report={report} />
         </div>
       </div>
 

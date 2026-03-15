@@ -54,7 +54,7 @@ export default {
    */
   async scheduled(_event: ScheduledEvent, env: WorkerEnv, ctx: ExecutionContext) {
     if (!env.STORE_METADATA_CACHE) {
-      console.log('[kv-cleanup] No KV binding - skipping scheduled cleanup.');
+      console.error('[kv-cleanup] No KV binding - skipping scheduled cleanup.');
       return;
     }
     ctx.waitUntil(pruneExpiredCacheEntries(env.STORE_METADATA_CACHE));

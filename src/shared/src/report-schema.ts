@@ -18,6 +18,8 @@ export const AnalysisSourceSchema = z.discriminatedUnion('type', [
 
 export const SeveritySchema = z.enum(['low', 'medium', 'high', 'critical']);
 
+export const CodeAnalysisModeSchema = z.enum(['none', 'lite', 'full']);
+
 export const EvidenceSchema = z.object({
   key: z.string().min(1),
   value: z.string().min(1)
@@ -40,6 +42,11 @@ export const PermissionSummarySchema = z.object({
 
 export const AnalysisLimitsSchema = z.object({
   codeExecutionAnalysisPerformed: z.boolean(),
+  codeAnalysisMode: CodeAnalysisModeSchema.optional(),
+  codeAnalysisFilesScanned: z.number().int().min(0).optional(),
+  codeAnalysisFilesSkipped: z.number().int().min(0).optional(),
+  codeAnalysisBytesScanned: z.number().int().min(0).optional(),
+  codeAnalysisBudgetExhausted: z.boolean().optional(),
   notes: z.array(z.string())
 });
 
@@ -131,6 +138,7 @@ export const AnalysisProgressEventSchema = z.object({
 
 export type AnalysisSource = z.infer<typeof AnalysisSourceSchema>;
 export type Severity = z.infer<typeof SeveritySchema>;
+export type CodeAnalysisMode = z.infer<typeof CodeAnalysisModeSchema>;
 export type RiskSignal = z.infer<typeof RiskSignalSchema>;
 export type PermissionSummary = z.infer<typeof PermissionSummarySchema>;
 export type AnalysisLimits = z.infer<typeof AnalysisLimitsSchema>;

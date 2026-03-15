@@ -117,6 +117,6 @@ export async function pruneExpiredCacheEntries(
     cursor = page.cursor;
   }
 
-  console.log(`[kv-cleanup] Scanned ${scanned} entries, deleted ${deleted}, errors ${errors}.`);
+  console.error(`[kv-cleanup] Scanned ${scanned} entries, deleted ${deleted}, errors ${errors}.`);
   return { scanned, deleted, errors };
 }

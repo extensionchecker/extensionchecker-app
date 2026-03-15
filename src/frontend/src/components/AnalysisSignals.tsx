@@ -11,16 +11,20 @@
  */
 
 import type { AnalysisReport } from '@extensionchecker/shared';
+import { deriveAnalysisSignalState } from '../utils/analysis-signal-state';
+import type { SignalVariant } from '../utils/analysis-signal-state';
+
+type ChipVariant = SignalVariant;
 
 interface SignalChipProps {
-  icon: 'check_circle' | 'cancel';
+  icon: string;
   label: string;
-  active: boolean;
+  variant: ChipVariant;
 }
 
-function SignalChip({ icon, label, active }: SignalChipProps) {
+function SignalChip({ icon, label, variant }: SignalChipProps) {
   return (
-    <span className={`analysis-signal ${active ? 'analysis-signal--ok' : 'analysis-signal--na'}`}>
+    <span className={`analysis-signal analysis-signal--${variant}`}>
       <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>
       {label}
     </span>
@@ -32,21 +36,25 @@ interface AnalysisSignalsProps {
 }
 
 export function AnalysisSignals({ report }: AnalysisSignalsProps) {
-  const hasStore = report.scoringBasis === 'manifest-and-store';
-  const hasCode = report.limits.codeExecutionAnalysisPerformed;
+  const { storeVariant, storeLabel, storeHasNote, codeVariant, codeLabel } = deriveAnalysisSignalState(report);
 
-  // Always label the store chip "Store" regardless of which store provided the
-  // data - the Submission Source card already identifies the specific store.
-  const storeChipLabel = 'Store';
+  const storeIcon =
+    storeVariant === 'ok'     ? 'check_circle' :
+    storeVariant === 'cached' ? 'history'      :
+    storeVariant === 'error'  ? 'cancel'       : 'block';
+
+  const codeIcon =
+    codeVariant === 'ok'      ? 'check_circle'      :
+    codeVariant === 'partial' ? 'incomplete_circle' : 'block';
 
   return (
     <div className="analysis-signals" aria-label="Analysis coverage">
-      <SignalChip icon="check_circle" label="Manifest" active={true} />
-      <SignalChip icon={hasStore ? 'check_circle' : 'cancel'} label={storeChipLabel} active={hasStore} />
-      <SignalChip icon={hasCode ? 'check_circle' : 'cancel'} label="Code" active={hasCode} />
-      {!hasStore && (
+      <SignalChip icon="check_circle" label="Manifest" variant="ok" />
+      <SignalChip icon={storeIcon} label={storeLabel} variant={storeVariant} />
+      <SignalChip icon={codeIcon} label={codeLabel} variant={codeVariant} />
+      {storeHasNote && (
         <p className="analysis-signals-note">
-          * Firefox Add-ons only - Chrome, Edge &amp; Opera have no public API
+          Store lookup requires Firefox Add-ons (AMO) API — Chrome, Edge &amp; Opera have no public API
         </p>
       )}
     </div>

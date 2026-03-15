@@ -242,7 +242,7 @@ describe('App results flows', () => {
     });
 
     fireEvent.click(screen.getByRole('tab', { name: /Findings/i }));
-    expect(screen.getByText('Why This Extension May Be Risky')).toBeInTheDocument();
+    expect(screen.getByText('Risk Signals')).toBeInTheDocument();
     expect(screen.getByText('Broad host access')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /Phases/i }));
@@ -317,6 +317,6 @@ describe('App results flows', () => {
     });
 
     fireEvent.click(screen.getByRole('tab', { name: /Findings/i }));
-    expect(screen.getByText('No specific high-impact risk signals were detected from manifest declarations.')).toBeInTheDocument();
+    expect(screen.getByText('No risk signals were detected.')).toBeInTheDocument();
   });
 });

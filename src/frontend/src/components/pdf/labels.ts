@@ -98,16 +98,10 @@ export function trustScoreColorRgb(score: number): RGB {
   return [34, 197, 94]; // green - high trust
 }
 
-export function statusColor(status: 'Complete' | 'Not Available'): { fill: RGB; text: RGB } {
-  if (status === 'Complete') {
-    return {
-      fill: [214, 243, 222],
-      text: [26, 110, 51]
-    };
-  }
-
-  return {
-    fill: [255, 234, 194],
-    text: [132, 85, 21]
-  };
+export function statusColor(status: import('../../types').PhaseStatus): { fill: RGB; text: RGB } {
+  if (status === 'complete')    return { fill: [214, 243, 222], text: [26, 110, 51]  }; // green
+  if (status === 'cached')     return { fill: [219, 234, 254], text: [37, 99, 235]   }; // blue
+  if (status === 'partial')    return { fill: [255, 234, 194], text: [132, 85, 21]  }; // amber
+  if (status === 'unavailable') return { fill: [255, 232, 232], text: [141, 36, 36] }; // red
+  return { fill: [241, 245, 249], text: [71, 85, 105] };                               // grey - not-available
 }

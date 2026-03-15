@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import type { AnalysisReport } from '@extensionchecker/shared';
-import type { ResultTab, PhaseStatus } from '../types';
+import type { ResultTab } from '../types';
 import { SEVERITY_ORDER } from '../constants';
 import { buildPermissionDetails } from '../permission-explainer';
 import { resolveExtensionDisplayName } from '../report-display';
 import { sourceStoreLabel, sourceListingUrl, sourceStoreBadgeIconSrc } from '../utils/report-source';
+import { buildPhases } from '../utils/build-phases';
 import { OverviewPanel } from '../components/OverviewPanel';
 import { FindingsPanel } from '../components/FindingsPanel';
 import { MetadataPanel } from '../components/MetadataPanel';
@@ -37,58 +38,8 @@ export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner
   }, [report]);
 
   const phases = useMemo(() => {
-    if (!report) {
-      return [];
-    }
-
-    const codePhaseStatus: PhaseStatus = report.limits.codeExecutionAnalysisPerformed ? 'complete' : 'not-available';
-
-    const scoringBasis = report.scoringBasis;
-
-    let storePhaseStatus: PhaseStatus;
-    let storePhaseDetail: string;
-
-    if (scoringBasis === 'manifest-and-store') {
-      storePhaseStatus = 'complete';
-      storePhaseDetail = 'Complete. Fresh store metadata was retrieved and incorporated into scoring.';
-    } else if (scoringBasis === 'manifest-and-store-cached') {
-      storePhaseStatus = 'cached';
-      const cachedAt = report.storeDataCachedAt
-        ? new Date(report.storeDataCachedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })
-        : 'an earlier date';
-      storePhaseDetail = `Store metadata retrieved from cache (originally scraped on ${cachedAt}). A fresh fetch was not available at analysis time. Scoring incorporates cached store signals.`;
-    } else if (scoringBasis === 'manifest-store-unavailable') {
-      storePhaseStatus = 'unavailable';
-      storePhaseDetail = 'Store lookup was attempted but returned no usable data — this may be due to a network error, a rate limit, or an unrecognized page structure. Scoring falls back to manifest analysis only.';
-    } else {
-      storePhaseStatus = 'not-available';
-      storePhaseDetail = report.source.type === 'file'
-        ? 'Not applicable. This extension was submitted as a file upload — no store lookup was performed.'
-        : 'Not applicable. No store lookup was performed for this extension.';
-    }
-
-    return [
-      {
-        id: 'manifest',
-        title: 'Phase 1: Manifest Analysis',
-        status: 'complete' as const,
-        detail: 'Complete. Parsed manifest metadata, permissions, host access, and manifest-declared capability combinations.'
-      },
-      {
-        id: 'store',
-        title: 'Phase 2: Store Metadata Lookup',
-        status: storePhaseStatus,
-        detail: storePhaseDetail
-      },
-      {
-        id: 'code',
-        title: 'Phase 3: Code Analysis',
-        status: codePhaseStatus,
-        detail: codePhaseStatus === 'complete'
-          ? 'Complete. Source and behavior-level analysis was executed.'
-          : 'Not available in this version. Deep semantic code review and runtime behavior detonation were not performed.'
-      }
-    ];
+    if (!report) return [];
+    return buildPhases(report);
   }, [report]);
 
   const permissionDetails = useMemo(() => {
@@ -223,7 +174,7 @@ export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner
           onClick={() => setActiveTab('metadata')}
         >
           <span className="material-symbols-outlined" aria-hidden="true">info</span>
-          <span className="result-tab-label">Metadata</span>
+          <span className="result-tab-label">Meta</span>
         </button>
         <button
           type="button"
@@ -232,6 +183,7 @@ export function ResultsPage({ report, isExportingPdf, onExportPdf, onOpenScanner
           aria-selected={activeTab === 'phases'}
           aria-controls="result-panel-phases"
           className={`result-tab ${activeTab === 'phases' ? 'active' : ''}`}
+          title="Phases"
           onClick={() => setActiveTab('phases')}
         >
           <span className="material-symbols-outlined" aria-hidden="true">account_tree</span>

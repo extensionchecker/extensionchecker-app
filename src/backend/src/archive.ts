@@ -39,6 +39,15 @@ function toU8(bytes: ArrayBuffer | Uint8Array): Uint8Array {
   return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
 }
 
+/**
+ * Returns the raw ZIP bytes for a package, stripping the CRX header if present.
+ * This is the CRX-aware byte normalization step shared by both manifest extraction
+ * and JS file extraction.
+ */
+export function getRawZipBytes(bytes: Uint8Array, packageKind: PackageKind): Uint8Array {
+  return packageKind === 'crx' ? extractCrxZipPayload(bytes) : bytes;
+}
+
 function extractCrxZipPayload(bytes: Uint8Array): Uint8Array {
   if (bytes.length < 12) {
     throw new Error('Invalid CRX: file is too small.');

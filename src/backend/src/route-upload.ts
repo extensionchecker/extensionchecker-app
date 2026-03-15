@@ -1,13 +1,53 @@
 import type { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { AnalysisProgressStep } from '@extensionchecker/shared';
-import { MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES, MAX_UPLOAD_REQUEST_BODY_BYTES } from './constants';
+import { MAX_PACKAGE_SIZE_BYTES, MAX_PACKAGE_SIZE_MEGABYTES, MAX_UPLOAD_REQUEST_BODY_BYTES, MAX_CODE_SCAN_BYTES_TOTAL, MAX_CODE_SCAN_BYTES_PER_FILE, MAX_CODE_SCAN_FILES, CODE_SCAN_WALL_CLOCK_BUDGET_MS } from './constants';
 import { extractManifestFromPackage } from './archive';
+import { extractJsFilesFromPackage } from './js-extractor';
+import { scanJsFile } from '@extensionchecker/engine';
+import type { CodeScanResult } from '@extensionchecker/engine';
 import { isMultipartContentType } from './security';
 import type { ManifestCandidate } from './schemas';
 import { exceedsRequestSizeLimit, hasAllowedPackageExtension, pickPackageKindFromUpload } from './download';
 import { buildReportFromManifest } from './report';
 import { wantsEventStream } from './middleware';
+
+const JS_EXTRACTION_OPTIONS = {
+  maxTotalBytes: MAX_CODE_SCAN_BYTES_TOTAL,
+  maxFileBytes: MAX_CODE_SCAN_BYTES_PER_FILE,
+  maxFiles: MAX_CODE_SCAN_FILES,
+  wallClockBudgetMs: CODE_SCAN_WALL_CLOCK_BUDGET_MS
+} as const;
+
+function runCodeScan(bytes: Uint8Array, rawManifest: unknown): CodeScanResult {
+  try {
+    const extraction = extractJsFilesFromPackage(bytes, 'zip', rawManifest, JS_EXTRACTION_OPTIONS);
+    const findings = extraction.files.flatMap((file) => scanJsFile(file));
+    const bytesScanned = extraction.files.reduce(
+      (sum, f) => sum + new TextEncoder().encode(f.content).byteLength,
+      0
+    );
+
+    return {
+      mode: 'lite',
+      findings,
+      filesScanned: extraction.files.length,
+      filesSkipped: extraction.filesSkipped,
+      bytesScanned,
+      budgetExhausted: extraction.budgetExhausted
+    };
+  } catch (error) {
+    console.error('Code scan failed (non-fatal):', error);
+    return {
+      mode: 'lite',
+      findings: [],
+      filesScanned: 0,
+      filesSkipped: 0,
+      bytesScanned: 0,
+      budgetExhausted: false
+    };
+  }
+}
 
 /**
  * Registers the POST /api/analyze/upload route onto the given Hono app.
@@ -45,9 +85,10 @@ export function registerUploadRoute(app: Hono): void {
     const packageKind = pickPackageKindFromUpload(uploaded);
 
     if (!streaming) {
+      const packageBytes = new Uint8Array(await uploaded.arrayBuffer());
       let manifestRaw: ManifestCandidate;
       try {
-        manifestRaw = extractManifestFromPackage(await uploaded.arrayBuffer(), packageKind) as ManifestCandidate;
+        manifestRaw = extractManifestFromPackage(packageBytes, packageKind) as ManifestCandidate;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Package parsing failed.';
         return context.json({ error: message }, 400);
@@ -59,7 +100,8 @@ export function registerUploadRoute(app: Hono): void {
         mimeType: uploaded.type || 'application/octet-stream'
       };
 
-      const reportResult = buildReportFromManifest(manifestRaw, source, uploaded.size);
+      const codeScanResult = runCodeScan(packageBytes, manifestRaw);
+      const reportResult = buildReportFromManifest(manifestRaw, source, uploaded.size, { attempted: false }, codeScanResult);
       if (!reportResult.ok) {
         return reportResult.response;
       }
@@ -75,16 +117,17 @@ export function registerUploadRoute(app: Hono): void {
       try {
         await emitProgress('extracting', 'Extracting manifest from package…', 40);
 
+        const packageBytes = new Uint8Array(await uploaded.arrayBuffer());
         let manifestRaw: ManifestCandidate;
         try {
-          manifestRaw = extractManifestFromPackage(await uploaded.arrayBuffer(), packageKind) as ManifestCandidate;
+          manifestRaw = extractManifestFromPackage(packageBytes, packageKind) as ManifestCandidate;
         } catch (error) {
           const msg = error instanceof Error ? error.message : 'Package parsing failed.';
           await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: msg }) });
           return;
         }
 
-        await emitProgress('analyzing', 'Analyzing manifest and permissions…', 70);
+        await emitProgress('analyzing', 'Analyzing manifest and permissions…', 80);
 
         const source = {
           type: 'file' as const,
@@ -92,7 +135,8 @@ export function registerUploadRoute(app: Hono): void {
           mimeType: uploaded.type || 'application/octet-stream'
         };
 
-        const reportResult = buildReportFromManifest(manifestRaw, source, uploaded.size);
+        const codeScanResult = runCodeScan(packageBytes, manifestRaw);
+        const reportResult = buildReportFromManifest(manifestRaw, source, uploaded.size, { attempted: false }, codeScanResult);
         if (!reportResult.ok) {
           await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Internal report contract violation.' }) });
           return;

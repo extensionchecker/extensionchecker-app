@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { analyzeManifest, computeStoreTrustScore, computeCompositeScore, toSeverity } from '@extensionchecker/engine';
-import { AnalysisReportSchema, type StoreMetadata } from '@extensionchecker/shared';
+import { analyzeManifest, computeStoreTrustScore, computeCompositeScore, toSeverity, capScore, aggregateCodeFindings } from '@extensionchecker/engine';
+import type { CodeScanResult } from '@extensionchecker/engine';
+import { AnalysisReportSchema, type StoreMetadata, type AnalysisLimits } from '@extensionchecker/shared';
 import { ManifestSchema, type ReportSource } from './schemas';
 import type { StoreDataResult } from './scrapers/types';
 
@@ -101,11 +102,64 @@ export function resolveStoreUrl(source: ReportSource): string | null {
   return null;
 }
 
+function formatBytesCompact(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1_048_576).toFixed(1)} MB`;
+}
+
+function buildLimits(codeScanResult: CodeScanResult | undefined): AnalysisLimits {
+  if (!codeScanResult || codeScanResult.filesScanned === 0) {
+    const notes: string[] = [
+      'Manifest-first analysis only.',
+      'No code-level pattern scan was performed for this extension.',
+      'No dynamic execution or full source-code semantic analysis was performed.'
+    ];
+
+    return {
+      codeExecutionAnalysisPerformed: false,
+      codeAnalysisMode: 'none',
+      codeAnalysisFilesScanned: 0,
+      codeAnalysisFilesSkipped: codeScanResult?.filesSkipped ?? 0,
+      codeAnalysisBytesScanned: 0,
+      codeAnalysisBudgetExhausted: codeScanResult?.budgetExhausted ?? false,
+      notes
+    };
+  }
+
+  const notes: string[] = [
+    `Lite pattern-based code scan: ${codeScanResult.filesScanned} file(s) analyzed (${formatBytesCompact(codeScanResult.bytesScanned)}).`
+  ];
+
+  if (codeScanResult.filesSkipped > 0) {
+    notes.push(
+      `${codeScanResult.filesSkipped} file(s) were not scanned: exceeded per-file or total scan budget.`
+    );
+  }
+
+  if (codeScanResult.budgetExhausted) {
+    notes.push('Scan budget was reached before all files could be analyzed. Results reflect a partial scan.');
+  }
+
+  notes.push('No dynamic execution or full source-code semantic analysis was performed.');
+
+  return {
+    codeExecutionAnalysisPerformed: true,
+    codeAnalysisMode: 'lite',
+    codeAnalysisFilesScanned: codeScanResult.filesScanned,
+    codeAnalysisFilesSkipped: codeScanResult.filesSkipped,
+    codeAnalysisBytesScanned: codeScanResult.bytesScanned,
+    codeAnalysisBudgetExhausted: codeScanResult.budgetExhausted,
+    notes
+  };
+}
+
 export function buildReportFromManifest(
   manifestRaw: unknown,
   source: ReportSource,
   packageSizeBytes: number,
-  storeResult: StoreDataResult = { attempted: false }
+  storeResult: StoreDataResult = { attempted: false },
+  codeScanResult?: CodeScanResult
 ) {
   const parsedManifest = ManifestSchema.safeParse(manifestRaw);
   if (!parsedManifest.success) {
@@ -141,8 +195,19 @@ export function buildReportFromManifest(
     }
   }
 
+  // Aggregate code scan findings into signals and a score contribution.
+  const codeAggregate = codeScanResult && codeScanResult.findings.length > 0
+    ? aggregateCodeFindings(codeScanResult.findings)
+    : { signals: [], score: 0 };
+
+  // Merge manifest signals with code scan signals.
+  const allRiskSignals = [...report.riskSignals, ...codeAggregate.signals];
+
+  // Capability score = manifest permissions score + code scan score impact (capped at 100).
+  const manifestPermissionsScore = report.permissionsScore ?? report.score.value;
+  const permissionsScore = capScore(manifestPermissionsScore + codeAggregate.score);
+
   // Compute composite score when store trust signals (rating or user count) are present.
-  const permissionsScore = report.permissionsScore ?? report.score.value;
   const storeTrustScore = computeStoreTrustScore(storeMetadata.rating, storeMetadata.userCount);
 
   let overallScore: number;
@@ -173,6 +238,7 @@ export function buildReportFromManifest(
 
   const enrichedReport = {
     ...report,
+    riskSignals: allRiskSignals,
     score: {
       value: overallScore,
       severity: overallSeverity,
@@ -186,7 +252,8 @@ export function buildReportFromManifest(
     ...(storeTrustScore !== null ? { storeTrustScore } : {}),
     scoringBasis,
     ...(storeDataCachedAt !== undefined ? { storeDataCachedAt } : {}),
-    storeMetadata
+    storeMetadata,
+    limits: buildLimits(codeScanResult)
   };
 
   const validatedReport = AnalysisReportSchema.safeParse(enrichedReport);

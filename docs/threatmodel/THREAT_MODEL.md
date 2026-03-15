@@ -99,6 +99,7 @@ graph TD
         A6["A6: Manifest Parsing"]
         A7["A7: External Downloads"]
         A8["A8: Client-Side Rendering"]
+        A9["A9: JS Code Scanning"]
     end
 ```
 
@@ -178,6 +179,7 @@ graph TD
 | D-7 | Rate limiter memory exhaustion | A1: API endpoints | Attacker floods from millions of unique IPs to grow the in-memory rate limit map. | IP key length validated (2–64 chars); map entries expire with time windows; new IPs beyond the 20,000-key cap are collapsed to a single `'overflow'` bucket so the map never grows unboundedly. | ✅ Mitigated |
 | D-8 | ReDoS in input parsing | A3: URLs, A4: IDs | Crafted input triggers catastrophic backtracking in regex. | URL parsing uses standard `new URL()` API (not regex); ID validation uses simple non-backtracking regexes (`/^[a-p]{32}$/`). | ✅ Mitigated |
 | D-9 | CPU exhaustion via complex manifest | A6: Manifest parsing | Manifest with extremely large permission arrays or deeply nested structures. | Zod schema enforces array-of-strings for permissions; JSON body capped at 16 KB for /api/analyze; manifest.json capped at 5 MB (from archive). | ✅ Mitigated |
+| D-10 | Code scanner ReDoS via adversarial JS | A5: Archive processing | An extension package contains JS files crafted to maximize backtracking in the lite regex detectors, exhausting CPU within the Worker budget. | All scanner regexes are linear (`/g` with `RegExp.exec` iteration, no nested quantifiers); total decompressed JS budget capped at 500 KB; wall-clock budget guard (3 s) terminates early if exceeded; per-file limit (200 KB) prevents single large-file attacks. | ✅ Mitigated |
 
 ---
 
@@ -199,8 +201,8 @@ graph TD
 ## STRIDE Findings Summary
 
 ```mermaid
-pie title Mitigation Status (31 findings)
-    "Mitigated" : 24
+pie title Mitigation Status (32 findings)
+    "Mitigated" : 25
     "Partial" : 6
     "Not Mitigated" : 1
 ```
@@ -211,9 +213,9 @@ pie title Mitigation Status (31 findings)
 | **Tampering** | 6 | 5 | 1 | 0 |
 | **Repudiation** | 3 | 0 | 2 | 1 |
 | **Information Disclosure** | 7 | 6 | 1 | 0 |
-| **Denial of Service** | 9 | 7 | 2 | 0 |
+| **Denial of Service** | 10 | 8 | 2 | 0 |
 | **Elevation of Privilege** | 8 | 8 | 0 | 0 |
-| **Total** | **31** | **24** | **6** | **1** |
+| **Total** | **32** | **25** | **6** | **1** |
 
 ---
 

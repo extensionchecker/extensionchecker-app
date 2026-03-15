@@ -17,6 +17,24 @@ export function toneForSeverity(severity: Severity): Tone {
   return 'good';
 }
 
+/**
+ * Maps an overall trust score (0–100) to a UI tone using the same five bands
+ * as verdictLabel() so that the card colour and the verdict text are always
+ * consistent with each other.
+ *
+ * 81–100 → High Trust    → good
+ * 61–80  → Strong Trust  → good
+ * 41–60  → Moderate Trust → caution
+ * 21–40  → Limited Trust  → warning
+ * 0–20   → Low Trust      → danger
+ */
+export function toneForTrustScore(trust: number): Tone {
+  if (trust >= 61) return 'good';
+  if (trust >= 41) return 'caution';
+  if (trust >= 21) return 'warning';
+  return 'danger';
+}
+
 /** Human-readable access tier matching the 4-band scoring system. */
 export function scoreBand(score: number): string {
   if (score <= 25) {
@@ -145,12 +163,14 @@ export function iconForTheme(theme: ThemePreference): string {
 
 export function phaseTone(status: PhaseStatus): Tone {
   if (status === 'complete') return 'good';
+  if (status === 'partial') return 'caution';
   if (status === 'cached') return 'info';
   return 'caution';
 }
 
 export function phaseIcon(status: PhaseStatus): string {
   if (status === 'complete') return 'check_circle';
+  if (status === 'partial') return 'incomplete_circle';
   if (status === 'cached') return 'history';
   if (status === 'unavailable') return 'warning';
   return 'pending';
@@ -158,6 +178,7 @@ export function phaseIcon(status: PhaseStatus): string {
 
 export function phaseStatusLabel(status: PhaseStatus): string {
   if (status === 'complete') return 'Complete';
+  if (status === 'partial') return 'Partial';
   if (status === 'cached') return 'Cached';
   if (status === 'unavailable') return 'Unavailable';
   return 'Not Available';

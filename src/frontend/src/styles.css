@@ -808,15 +808,22 @@ a.extension-identity-store:hover {
   border-bottom: 1px solid var(--panel-border);
   background: color-mix(in srgb, var(--panel) 60%, transparent);
   border-radius: 10px 10px 0 0;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* IE/Edge */
   margin-bottom: 0.9rem;
   container-type: inline-size;
+}
+
+.result-tabs::-webkit-scrollbar {
+  display: none;               /* Chrome/Safari */
 }
 
 .result-tab {
   flex: 0 0 auto;
   margin: 0;
-  padding: 0.6rem 0.9rem;
+  padding: 0.6rem 0.75rem;
   border: 0;
   border-bottom: 2px solid transparent;
   border-radius: 0;
@@ -853,9 +860,17 @@ a.extension-identity-store:hover {
   display: inline;
 }
 
-@container (max-width: 400px) {
+/* Drop ALL labels only at very tight widths — should never happen on a normal phone. */
+@container (max-width: 319px) {
   .result-tab-label {
     display: none;
+  }
+
+  /* When labels are hidden, distribute tabs equally and pad for touch targets. */
+  .result-tab {
+    flex: 1 1 0;
+    padding: 0.75rem 0.5rem;
+    min-height: 2.75rem;
   }
 }
 
@@ -870,14 +885,13 @@ a.extension-identity-store:hover {
   padding: 0.95rem 1rem;
   margin-bottom: 1rem;
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.75rem;
   max-inline-size: 100%;
 }
 
 .verdict-main {
   min-width: 0;
-  flex: 1;
 }
 
 .verdict-label {
@@ -1050,16 +1064,14 @@ a.extension-identity-store:hover {
   color: var(--muted);
 }
 
-/* Left column inside the verdict card: donuts on top, signal chips below */
-.verdict-left {
+/* Bottom row inside the verdict card: donuts + phase chips, always centered */
+.verdict-donuts {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.55rem;
-  flex-shrink: 0;
-  /* Cap width so the no-store note text cannot push verdict-main out of the card */
-  max-width: 360px;
-  min-width: 0;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 0.65rem;
 }
 
 /* "Trust" word rendered below the big overall trust donut */
@@ -1108,6 +1120,30 @@ a.extension-identity-store:hover {
 .analysis-signal--ok {
   color: #22c55e;
   background: color-mix(in srgb, #22c55e 16%, transparent);
+}
+
+/* Lite regex scan — amber so readers know it is NOT a full AST analysis */
+.analysis-signal--lite {
+  color: #f59e0b;
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+}
+
+/* Partial / budget-exhausted scan — same amber family as lite */
+.analysis-signal--partial {
+  color: #ea580c;
+  background: color-mix(in srgb, #ea580c 16%, transparent);
+}
+
+/* Cached store data — blue */
+.analysis-signal--cached {
+  color: #3b82f6;
+  background: color-mix(in srgb, #3b82f6 16%, transparent);
+}
+
+/* Phase attempted but failed */
+.analysis-signal--error {
+  color: #dc2626;
+  background: color-mix(in srgb, #dc2626 16%, transparent);
 }
 
 .analysis-signal--na {
@@ -1245,6 +1281,80 @@ a.extension-identity-store:hover {
 
 .permission-danger {
   font-size: 0.9rem;
+}
+
+/* ===== Findings source filters ===== */
+
+.findings-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.findings-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+
+.findings-filter-chip .material-symbols-outlined {
+  font-size: 0.95rem;
+}
+
+.findings-filter-chip:not([disabled]):hover {
+  border-color: var(--focus);
+}
+
+.findings-filter-chip--off {
+  opacity: 0.45;
+}
+
+.findings-filter-chip[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.findings-filter-count {
+  background: color-mix(in srgb, var(--bg-2) 80%, transparent);
+  border-radius: 5px;
+  padding: 0.05rem 0.32rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  min-width: 1.4rem;
+  text-align: center;
+  margin-left: 0.1rem;
+}
+
+/* Source provenance pill on each signal card */
+.signal-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.findings-source-pill {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.18rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--bg-2) 60%, transparent);
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .signal-list {
@@ -1391,6 +1501,11 @@ a.extension-identity-store:hover {
   border-color: rgba(34, 197, 94, 0.42);
 }
 
+/* Lite scan overrides the green border with amber to signal reduced depth */
+.phase-card.complete.phase-card--lite {
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
 .phase-card.cached {
   border-color: rgba(59, 130, 246, 0.42);
 }
@@ -1414,6 +1529,36 @@ a.extension-identity-store:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+}
+
+/* Right side of phase header: quality badge + status pill */
+.phase-head-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+/* Lite/regex scan quality badge on the phase card */
+.phase-quality-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.18rem 0.5rem 0.18rem 0.35rem;
+  border-radius: 7px;
+  border: 1px solid rgba(245, 158, 11, 0.55);
+  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  color: #f59e0b;
+  white-space: nowrap;
+}
+
+.phase-quality-badge .material-symbols-outlined {
+  font-size: 0.82rem;
+  line-height: 1;
 }
 
 .phase-status {
@@ -1527,9 +1672,11 @@ a.extension-identity-store:hover {
     border-radius: 8px 8px 0 0;
   }
 
+  /* On narrow phones: taller touch targets, tighter horizontal padding. */
   .result-tab {
-    padding: 0.62rem 0.2rem;
-    min-height: 2.5rem;
+    padding: 0.75rem 0.6rem;
+    min-height: 2.75rem;
+    font-size: 0.82rem;
   }
 
   .theme-toggle {
@@ -1543,12 +1690,6 @@ a.extension-identity-store:hover {
   }
 
   .verdict {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .verdict-left {
-    width: 100%;
     align-items: center;
   }
 

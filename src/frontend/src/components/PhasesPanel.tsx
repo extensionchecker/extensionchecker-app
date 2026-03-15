@@ -6,6 +6,8 @@ interface Phase {
   id: string;
   title: string;
   status: PhaseStatus;
+  /** When present, distinguishes lite regex scanning from a full AST scan. */
+  scanQuality?: 'lite' | 'full';
   detail: string;
 }
 
@@ -21,7 +23,7 @@ export function PhasesPanel({ report, phases }: PhasesPanelProps) {
         <h3>Analysis Pipeline Status</h3>
         <ul className="phase-list">
           {phases.map((phase) => (
-            <li key={phase.id} className={`phase-card ${phase.status}`}>
+            <li key={phase.id} className={`phase-card ${phase.status}${phase.scanQuality === 'lite' ? ' phase-card--lite' : ''}`}>
               <div className="phase-head">
                 <strong>
                   <span className={`material-symbols-outlined tone-icon ${phaseTone(phase.status)}`} aria-hidden="true">
@@ -29,7 +31,15 @@ export function PhasesPanel({ report, phases }: PhasesPanelProps) {
                   </span>
                   {phase.title}
                 </strong>
-                <span className={`phase-status ${phase.status}`}>{phaseStatusLabel(phase.status)}</span>
+                <div className="phase-head-badges">
+                  {phase.scanQuality === 'lite' && (
+                    <span className="phase-quality-badge" title="Lite pattern-based regex scan — not a full AST analysis">
+                      <span className="material-symbols-outlined" aria-hidden="true">flash_on</span>
+                      Lite Regex
+                    </span>
+                  )}
+                  <span className={`phase-status ${phase.status}`}>{phaseStatusLabel(phase.status)}</span>
+                </div>
               </div>
               <p>{phase.detail}</p>
             </li>

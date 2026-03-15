@@ -146,7 +146,7 @@ describe('pruneExpiredCacheEntries', () => {
   });
 
   it('logs a summary after completion', async () => {
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const logSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await pruneExpiredCacheEntries(makeKv({}), NOW);
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('[kv-cleanup]'));
     logSpy.mockRestore();

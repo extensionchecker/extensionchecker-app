@@ -35,11 +35,19 @@ const AmoLocalizedStringSchema = z
   });
 
 const AmoAddonSchema = z.object({
-  average_daily_users: z.number().int().min(0),
-  ratings: z.object({
-    average: z.number().min(0).max(5),
-    count: z.number().int().min(0)
-  }),
+  // AMO documents this as an integer, but we accept any non-negative number
+  // to be resilient against future API changes.
+  average_daily_users: z.number().min(0),
+  // ratings is absent or null for brand-new addons with zero reviews.
+  ratings: z
+    .object({
+      // average is 0 (not null) when count is 0, but we accept null/undefined
+      // defensively in case the AMO API changes behaviour.
+      average: z.number().min(0).max(5).nullable().optional(),
+      count: z.number().min(0).nullable().optional()
+    })
+    .optional()
+    .nullable(),
   /** Developer homepage URL, localized. Present when the developer has set one. */
   homepage: z
     .object({ url: AmoLocalizedStringSchema })
@@ -89,10 +97,14 @@ export async function fetchAmoStoreData(
   }
 
   const result: ScrapedStoreData = {
-    rating: parsed.data.ratings.average,
-    ratingCount: parsed.data.ratings.count,
-    userCount: parsed.data.average_daily_users
+    userCount: Math.round(parsed.data.average_daily_users)
   };
+
+  const ratings = parsed.data.ratings;
+  if (ratings != null) {
+    if (typeof ratings.average === 'number') result.rating = ratings.average;
+    if (typeof ratings.count === 'number') result.ratingCount = Math.round(ratings.count);
+  }
 
   const summary = parsed.data.summary;
   if (summary) result.description = summary;

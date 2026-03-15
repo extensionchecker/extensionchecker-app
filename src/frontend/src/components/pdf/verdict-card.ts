@@ -1,11 +1,23 @@
 import type jsPDF from 'jspdf';
 import type { AnalysisReport } from '@extensionchecker/shared';
-import type { SeverityStyle } from './types';
-import { BODY_TEXT, CARD_BG, CARD_BORDER, MUTED_TEXT } from './constants';
+import type { RGB, SeverityStyle } from './types';
+import { BODY_TEXT, MUTED_TEXT } from './constants';
 import { drawRoundedCard, setFillColor, setTextColor, splitAndClamp } from './primitives';
-import { trustScoreColorRgb } from './labels';
 import { verdictLabel } from '../../utils/verdict';
 import { overallTrustScore, trustSignalExplanation } from '../../utils/trust-signal';
+import { deriveAnalysisSignalState } from '../../utils/analysis-signal-state';
+import type { SignalVariant } from '../../utils/analysis-signal-state';
+import { drawCompositeScoreRow } from './composite-score-row';
+
+// ── Signal chip colour mapping ───────────────────────────────────────────────
+
+function signalChipColors(variant: SignalVariant): { fill: RGB; text: RGB } {
+  if (variant === 'ok')      return { fill: [214, 243, 222], text: [26, 110, 51]  };
+  if (variant === 'cached')  return { fill: [219, 234, 254], text: [37, 99, 235]  };
+  if (variant === 'error')   return { fill: [255, 232, 232], text: [141, 36, 36]  };
+  if (variant === 'partial') return { fill: [255, 234, 194], text: [132, 85, 21]  };
+  return                            { fill: [241, 245, 249], text: [71, 85, 105]  };
+}
 
 export function drawVerdictCard(
   doc: jsPDF,
@@ -13,171 +25,119 @@ export function drawVerdictCard(
   y: number,
   margin: number,
   contentWidth: number,
-  extensionName: string,
-  store: string,
+  _extensionName: string,
+  _store: string,
   verdictStyle: SeverityStyle
 ): number {
-  const metaW = 134;
-  const metaInnerW = metaW - 18;
-  const extensionMetaName = splitAndClamp(doc, extensionName, metaInnerW, 2);
-  const extensionMetaStore = splitAndClamp(doc, store, metaInnerW, 2);
-  const extensionMetaVersion = splitAndClamp(doc, `v${report.metadata.version} (MV${report.metadata.manifestVersion})`, metaInnerW, 2);
+  const trustScore = overallTrustScore(report);
 
-  // Trust signal explanation (may be null for manifest-only reports).
-  const signalNote = trustSignalExplanation(report);
+  // jsPDF's built-in Helvetica uses WinAnsi encoding, which does not include
+  // the ★ (U+2605) glyph. Replace it with "/5" before handing text to jsPDF
+  // to avoid glyph substitution that corrupts both the character and the
+  // surrounding letter-spacing.
+  const signalNote      = trustSignalExplanation(report)?.replace(/★/g, '/5') ?? null;
   const signalNoteLines = signalNote !== null
-    ? splitAndClamp(doc, signalNote, contentWidth - 250, 2)
+    ? splitAndClamp(doc, signalNote, contentWidth - 28, 2)
     : [];
   const signalNoteHeight = signalNoteLines.length > 0 ? signalNoteLines.length * 11 + 8 : 0;
 
-  const metaHeight = 14
-    + 12 + (extensionMetaName.length * 10) + 8
-    + 12 + (extensionMetaStore.length * 10) + 8
-    + 12 + (extensionMetaVersion.length * 10) + 12;
-  // Minimum height: 160 to accommodate circle (y+100) + signals row (y+114) + note (y+124).
-  const verdictCardHeight = Math.max(160 + signalNoteHeight, metaHeight + 24);
+  // Upper section = OVERALL TRUST label + verdict name + trust score line +
+  // summary paragraph + optional signal note, with a minimum for breathing room.
+  const TEXT_TOP_PAD = 16;
+  const verdictNameH = 28; // font 20 + gap
+  const trustScoreH  = 18;
+  const summaryLines = splitAndClamp(doc, report.summary, contentWidth - 28, 4);
+  const summaryH     = summaryLines.length * 12;
+  const upperSectionHeight = Math.max(
+    TEXT_TOP_PAD + 14 + verdictNameH + trustScoreH + summaryH + signalNoteHeight + 16,
+    120,
+  );
+
+  const COMPOSITE_ROW_H = 100; // large donut diameter (72) + label (12) + padding
+  const SIGNAL_CHIPS_H  = 28;
+  const verdictCardHeight = upperSectionHeight + COMPOSITE_ROW_H + SIGNAL_CHIPS_H;
 
   drawRoundedCard(doc, margin, y, contentWidth, verdictCardHeight, verdictStyle.fill, verdictStyle.border);
 
-  // Trust score circle - uses inverted colour scale: green = high trust.
-  const trustScore = overallTrustScore(report);
-  const scoreX = margin + 50;
-  const scoreY = y + 70;
-  const scoreRadius = 30;
-
-  setFillColor(doc, trustScoreColorRgb(trustScore));
-  doc.circle(scoreX, scoreY, scoreRadius, 'F');
+  // ── Verdict text block (full width, flush left) ───────────────────────────
+  const textX = margin + 14;
+  const textW = contentWidth - 28;
+  let   textY = y + TEXT_TOP_PAD;
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  setTextColor(doc, [255, 255, 255]);
-  doc.text(String(trustScore), scoreX, scoreY + 5, { align: 'center' });
+  doc.setFontSize(9);
+  setTextColor(doc, MUTED_TEXT);
+  doc.text('OVERALL TRUST', textX, textY + 9);
+  textY += 14;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  setTextColor(doc, verdictStyle.text);
+  doc.text(verdictLabel(report), textX, textY + 20);
+  textY += verdictNameH;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  setTextColor(doc, BODY_TEXT);
+  doc.text(`Trust score ${trustScore}/100`, textX, textY + 12);
+  textY += trustScoreH;
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.text('/100', scoreX, scoreY + 16, { align: 'center' });
+  doc.setFontSize(9.5);
+  setTextColor(doc, MUTED_TEXT);
+  doc.text(summaryLines, textX, textY + 11, { lineHeightFactor: 1.2 });
+  textY += summaryH;
 
-  // Analysis signal indicators: three compact coloured dots + labels below the circle.
-  // Drawn as small filled circles (avoids font encoding issues with unicode checkmarks).
-  const hasStore = report.scoringBasis === 'manifest-and-store';
-  const hasCode = report.limits.codeExecutionAnalysisPerformed;
+  if (signalNoteLines.length > 0) {
+    doc.setFontSize(9);
+    doc.text(signalNoteLines, textX, textY + 13, { lineHeightFactor: 1.2 });
+  }
 
-  const signalDotR = 3.5;
-  const signalRowY = scoreY + scoreRadius + 14;
-  // When store data is present, label it by source (Firefox Add-ons / AMO).
-  // Chrome, Edge, and Opera do not expose public APIs.
-  const storeSignalLabel = hasStore ? 'Firefox Add-ons' : 'Store';
-  const signals: Array<{ label: string; ok: boolean }> = [
-    { label: 'Manifest', ok: true },
-    { label: storeSignalLabel, ok: hasStore },
-    { label: 'Code', ok: hasCode }
+  // ── Composite score donut row (below text, full card width) ─────────────
+  drawCompositeScoreRow(
+    doc, report, y, upperSectionHeight, margin, contentWidth, verdictStyle.fill,
+  );
+
+  // ── Analysis signal chips (centred below composite row) ──────────────────
+  const signalState   = deriveAnalysisSignalState(report);
+  const chipsData: Array<{ label: string; variant: SignalVariant }> = [
+    { label: 'Manifest',             variant: 'ok'                      },
+    { label: signalState.storeLabel, variant: signalState.storeVariant  },
+    { label: signalState.codeLabel,  variant: signalState.codeVariant   },
   ];
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
 
-  // Measure total width so we can centre the row under the circle.
-  const SIGNAL_GAP = 12;
-  const signalWidths = signals.map(({ label }) => signalDotR * 2 + 3 + doc.getTextWidth(label));
-  const totalSignalWidth = signalWidths.reduce((a, b) => a + b, 0) + SIGNAL_GAP * (signals.length - 1);
-  let sigX = scoreX - totalSignalWidth / 2;
+  const chipPadX   = 7;
+  const chipH      = 13;
+  const chipGap    = 6;
+  const chipWidths = chipsData.map(({ label }) => doc.getTextWidth(label) + chipPadX * 2);
+  const totalChipW = chipWidths.reduce((a, b) => a + b, 0) + chipGap * (chipsData.length - 1);
 
-  for (let i = 0; i < signals.length; i++) {
-    const { label, ok } = signals[i]!;
-    const dotColor: [number, number, number] = ok ? [34, 197, 94] : [148, 163, 184];
+  const chipsY = y + upperSectionHeight + COMPOSITE_ROW_H + 7;
+  let chipX    = margin + (contentWidth - totalChipW) / 2;
 
-    setFillColor(doc, dotColor);
-    doc.circle(sigX + signalDotR, signalRowY, signalDotR, 'F');
-
-    setTextColor(doc, ok ? [34, 197, 94] : [148, 163, 184]);
-    doc.text(label, sigX + signalDotR * 2 + 3, signalRowY + 2.5);
-
-    sigX += signalWidths[i]! + SIGNAL_GAP;
+  for (let i = 0; i < chipsData.length; i++) {
+    const { label, variant } = chipsData[i]!;
+    const { fill, text }     = signalChipColors(variant);
+    const w                  = chipWidths[i]!;
+    setFillColor(doc, fill);
+    doc.roundedRect(chipX, chipsY, w, chipH, 6, 6, 'F');
+    setTextColor(doc, text);
+    doc.text(label, chipX + chipPadX, chipsY + 9);
+    chipX += w + chipGap;
   }
 
-  // If store data was absent, note which stores have public APIs.
-  if (!hasStore) {
+  if (signalState.storeHasNote) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(6.5);
     setTextColor(doc, MUTED_TEXT);
-    doc.text('* Store data: Firefox Add-ons only \u2014 Chrome, Edge & Opera have no public API', scoreX, signalRowY + 10, { align: 'center' });
+    doc.text(
+      'Store: Firefox Add-ons only — Chrome, Edge & Opera have no public API',
+      margin + contentWidth / 2, chipsY + chipH + 7, { align: 'center' }
+    );
   }
-
-  // Verdict text - label and score come from the shared utility functions.
-  const verdictTextX = margin + 95;
-  const verdictTextW = contentWidth - 250;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  setTextColor(doc, MUTED_TEXT);
-  doc.text('OVERALL TRUST', verdictTextX, y + 22);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(20);
-  setTextColor(doc, verdictStyle.text);
-  doc.text(verdictLabel(report), verdictTextX, y + 47);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  setTextColor(doc, BODY_TEXT);
-  doc.text(`Trust score ${trustScore}/100`, verdictTextX, y + 66);
-
-  doc.setFontSize(10);
-  setTextColor(doc, MUTED_TEXT);
-  const summaryLines = splitAndClamp(doc, report.summary, verdictTextW, 4);
-  doc.text(summaryLines, verdictTextX, y + 84, { lineHeightFactor: 1.15 });
-
-  // Trust signal explanation (e.g. "5.0★ but only 12 users - …").
-  if (signalNoteLines.length > 0) {
-    const signalNoteY = y + 84 + summaryLines.length * 11 + 8;
-    doc.setFontSize(9.5);
-    setTextColor(doc, MUTED_TEXT);
-    doc.text(signalNoteLines, verdictTextX, signalNoteY, { lineHeightFactor: 1.15 });
-  }
-
-  // Embedded meta card
-  const metaX = margin + contentWidth - 148;
-  const metaY = y + 12;
-  const metaH = verdictCardHeight - 24;
-
-  drawRoundedCard(doc, metaX, metaY, metaW, metaH, CARD_BG, CARD_BORDER);
-
-  let metaCursorY = metaY + 14;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  setTextColor(doc, MUTED_TEXT);
-  doc.text('EXTENSION', metaX + 9, metaCursorY);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  setTextColor(doc, BODY_TEXT);
-  metaCursorY += 12;
-  doc.text(extensionMetaName, metaX + 9, metaCursorY, { lineHeightFactor: 1.1 });
-  metaCursorY += extensionMetaName.length * 10 + 8;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  setTextColor(doc, MUTED_TEXT);
-  doc.text('STORE', metaX + 9, metaCursorY);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  setTextColor(doc, BODY_TEXT);
-  metaCursorY += 12;
-  doc.text(extensionMetaStore, metaX + 9, metaCursorY, { lineHeightFactor: 1.1 });
-  metaCursorY += extensionMetaStore.length * 10 + 8;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  setTextColor(doc, MUTED_TEXT);
-  doc.text('VERSION', metaX + 9, metaCursorY);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  setTextColor(doc, BODY_TEXT);
-  metaCursorY += 12;
-  doc.text(extensionMetaVersion, metaX + 9, metaCursorY, { lineHeightFactor: 1.1 });
 
   return verdictCardHeight;
 }

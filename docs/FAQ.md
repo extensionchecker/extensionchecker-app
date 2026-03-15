@@ -107,6 +107,32 @@ Yes. You can upload the extension package file (`.crx`, `.xpi`, or `.zip`) direc
 
 ---
 
+## How does the code scanning work?
+
+Phase 3 of every analysis runs a **lite regex-based code scanner** over the JavaScript files inside the extension package. This scan is designed to run within the tight CPU budget of the Cloudflare Workers runtime (approximately 10 ms of CPU time per request).
+
+**What the lite scan checks:**
+
+| Category | Signals detected |
+|---|---|
+| Dynamic code execution | `eval()`, `new Function()`, `setTimeout`/`setInterval` with string arguments |
+| DOM injection | `innerHTML`, `outerHTML`, `insertAdjacentHTML()`, `document.write()` |
+| Remote script loading | `createElement("script")` combined with a `.src` assignment |
+| Data exfiltration | `document.cookie`, `navigator.clipboard`, password field selectors, `sendBeacon()`, `WebSocket` |
+| Dangerous Chrome APIs | `chrome.debugger`, `chrome.proxy`, `chrome.cookies`, `chrome.management`, `chrome.webRequest` |
+| Obfuscation | `atob()` calls, Dean Edwards packer pattern, hex-encoded string arrays |
+| Messaging abuse | `onMessage` or `onConnect` combined with `eval()` in the same file |
+
+**File prioritisation:** The scanner processes the most security-sensitive files first — background scripts and service workers, then content scripts declared in the manifest, then web-accessible resources, then all other `.js` files. If the scan budget is exhausted before all files are processed, you will see a **Partial** status in Phase 3 and your report will indicate how many files were skipped. The highest-risk files are always scanned first.
+
+**What "Partial" means:** If Phase 3 shows _Partial_, the analysis ran out of byte budget (500 KB total, 200 KB per file, 30 files maximum) before scanning every `.js` file in the package. The findings still reflect the most important files. A partial result is not a failing result — it means some less-critical files were not examined.
+
+**Score contribution:** Each finding is treated as additive evidence on top of the manifest-level signal for the same capability. For example, if the manifest declares the `cookies` permission _and_ the code actively calls `chrome.cookies`, both signals contribute to the score independently.
+
+**Self-hosted deployments with full AST scanning:** The default public deployment uses regex-only scanning because the Cloudflare Workers free tier cannot run a JavaScript parser within its CPU limits. If you host the backend yourself you can add a full AST-based scanner (e.g. using `acorn` or `@babel/parser`) — the `CodeAnalysisMode` schema in `src/shared` supports `'full'` for this purpose.
+
+---
+
 ## Is my data private?
 
 Extension packages and manifests submitted for analysis are processed in memory and are not stored. See the [Privacy Policy](/privacy) for full details.

@@ -2,6 +2,7 @@ import type { Severity } from '@extensionchecker/shared';
 import type { RGB, SeverityStyle } from './types';
 
 export const PAGE_BG: RGB = [244, 247, 255];
+export const DONUT_BG_RING: RGB = [225, 230, 240];
 export const HEADER_BG: RGB = [16, 35, 76];
 export const HEADER_TEXT: RGB = [240, 246, 255];
 export const BODY_TEXT: RGB = [25, 33, 49];
