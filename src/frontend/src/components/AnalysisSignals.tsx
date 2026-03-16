@@ -20,11 +20,12 @@ interface SignalChipProps {
   icon: string;
   label: string;
   variant: ChipVariant;
+  tooltip?: string;
 }
 
-function SignalChip({ icon, label, variant }: SignalChipProps) {
+function SignalChip({ icon, label, variant, tooltip }: SignalChipProps) {
   return (
-    <span className={`analysis-signal analysis-signal--${variant}`}>
+    <span className={`analysis-signal analysis-signal--${variant}`} title={tooltip}>
       <span className="material-symbols-outlined" aria-hidden="true">{icon}</span>
       {label}
     </span>
@@ -36,7 +37,7 @@ interface AnalysisSignalsProps {
 }
 
 export function AnalysisSignals({ report }: AnalysisSignalsProps) {
-  const { storeVariant, storeLabel, storeHasNote, codeVariant, codeLabel } = deriveAnalysisSignalState(report);
+  const { storeVariant, storeLabel, storeTooltip, storeHasNote, codeVariant, codeLabel, codeTooltip } = deriveAnalysisSignalState(report);
 
   const storeIcon =
     storeVariant === 'ok'     ? 'check_circle' :
@@ -49,9 +50,9 @@ export function AnalysisSignals({ report }: AnalysisSignalsProps) {
 
   return (
     <div className="analysis-signals" aria-label="Analysis coverage">
-      <SignalChip icon="check_circle" label="Manifest" variant="ok" />
-      <SignalChip icon={storeIcon} label={storeLabel} variant={storeVariant} />
-      <SignalChip icon={codeIcon} label={codeLabel} variant={codeVariant} />
+      <SignalChip icon="check_circle" label="Manifest" variant="ok" tooltip="Manifest analysis complete." />
+      <SignalChip icon={storeIcon} label={storeLabel} variant={storeVariant} tooltip={storeTooltip} />
+      <SignalChip icon={codeIcon} label={codeLabel} variant={codeVariant} tooltip={codeTooltip} />
       {storeHasNote && (
         <p className="analysis-signals-note">
           Store lookup requires Firefox Add-ons (AMO) API — Chrome, Edge &amp; Opera have no public API

@@ -160,9 +160,11 @@ export async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeout
 
   // Re-validate the final URL after redirect resolution to defend against
   // SSRF via open redirects on store domains.  We only check for private/
-  // loopback destinations here — the allowlist was already applied to the
-  // initial URL, and legitimate store downloads frequently redirect to CDN
-  // hosts that are outside the store-specific allowlist.
+  // loopback destinations and non-HTTP(S) protocols here — the allowlist was
+  // already applied to the initial URL, and legitimate store downloads
+  // frequently redirect to CDN hosts (including over HTTP) outside the
+  // store-specific allowlist.  For example, Microsoft's Edge extension CDN
+  // uses plain-HTTP CDN endpoints as the final download destination.
   //
   // Only run this check when response.url is non-empty: the WHATWG fetch
   // spec sets response.url to the final URL after redirect resolution, but

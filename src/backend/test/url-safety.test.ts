@@ -43,8 +43,15 @@ describe('validateRedirectDestination', () => {
     expect(validateRedirectDestination('https://archive.mozilla.org/pub/addon.xpi')).toBeNull();
   });
 
-  it('rejects non-HTTPS redirect destinations', () => {
-    expect(validateRedirectDestination('http://example.com/file.zip')).toMatch(/HTTPS/);
+  it('allows public HTTP CDN destinations (e.g. Microsoft Edge extension CDN)', () => {
+    expect(validateRedirectDestination('http://download.microsoft.com/extensions/extension.crx')).toBeNull();
+    expect(validateRedirectDestination('http://extensionstorecdn.azureedge.net/extension.crx')).toBeNull();
+  });
+
+  it('rejects redirect destinations using unsupported protocols', () => {
+    expect(validateRedirectDestination('file:///etc/passwd')).toMatch(/unsupported protocol/i);
+    expect(validateRedirectDestination('data:text/plain,evil')).toMatch(/unsupported protocol/i);
+    expect(validateRedirectDestination('ftp://example.com/file.zip')).toMatch(/unsupported protocol/i);
   });
 
   it('rejects redirects to localhost', () => {

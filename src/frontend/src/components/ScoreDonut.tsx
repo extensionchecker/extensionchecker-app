@@ -18,10 +18,17 @@ interface ScoreDonutProps {
   label?: string;
   /** Controls colour palette and band labels. Defaults to 'capability'. */
   variant?: 'capability' | 'trust';
+  /**
+   * When true, renders a greyed-out unavailable ring ("—") instead of a score.
+   * Use this when the data source was not available or not applicable.
+   */
+  unavailable?: boolean;
 }
 
-export function ScoreDonut({ score, small = false, label, variant = 'capability' }: ScoreDonutProps) {
-  const color = variant === 'trust' ? trustScoreColor(score) : scoreColor(score);
+const UNAVAILABLE_COLOR = 'rgba(148, 163, 184, 0.35)';
+
+export function ScoreDonut({ score, small = false, label, variant = 'capability', unavailable = false }: ScoreDonutProps) {
+  const color = unavailable ? UNAVAILABLE_COLOR : (variant === 'trust' ? trustScoreColor(score) : scoreColor(score));
   const band  = variant === 'trust' ? trustScoreBand(score)  : scoreBand(score);
 
   if (small) {
@@ -30,16 +37,22 @@ export function ScoreDonut({ score, small = false, label, variant = 'capability'
         <div
           className="score-donut score-donut--small"
           style={{
-            ['--score' as string]: score,
+            ['--score' as string]: unavailable ? 0 : score,
             ['--score-color' as string]: color
           }}
-          aria-label={`Score: ${score} out of 100`}
+          aria-label={unavailable ? 'Score unavailable' : `Score: ${score} out of 100`}
         >
           <div className="score-donut-inner score-donut-inner--small">
-            <strong>{score}</strong>
-            <span>/100</span>
+            {unavailable ? (
+              <strong style={{ fontSize: '0.7rem', letterSpacing: '0.03em' }}>N/A</strong>
+            ) : (
+              <>
+                <strong>{score}</strong>
+                <span>/100</span>
+              </>
+            )}
           </div>
-          <div className="score-band score-band--small">{band}</div>
+          {!unavailable && <div className="score-band score-band--small">{band}</div>}
         </div>
         {label ? <p className="score-donut-label">{label}</p> : null}
       </div>

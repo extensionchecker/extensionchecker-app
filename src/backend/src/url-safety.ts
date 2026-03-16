@@ -107,10 +107,15 @@ export function validatePublicFetchUrl(rawUrl: string): { ok: true; url: URL } |
  * Validates the final URL reached after an HTTP redirect chain.
  *
  * Unlike {@link validatePublicFetchUrl} this does NOT apply the extension-store
- * allowlist — legitimate store downloads can redirect to first-party CDN hosts
- * outside the allowlist.  Instead it gates only on the properties that would
- * enable SSRF: non-HTTPS scheme, localhost/local hostnames, and private or
- * loopback IP addresses (including IPv4-mapped IPv6 addresses).
+ * allowlist or a protocol restriction — legitimate store downloads can redirect
+ * to first-party CDN hosts (including over plain HTTP) outside the allowlist.
+ * For example, Microsoft's Edge extension CDN redirects to HTTP CDN endpoints.
+ *
+ * This function gates only on the properties that enable SSRF: localhost/local
+ * hostnames and private or loopback IP addresses (including IPv4-mapped IPv6).
+ * Protocol-level interception risk is accepted because the authoritative store
+ * URL is already fetched over HTTPS, and CDN HTTP redirects are outside this
+ * tool's threat model.
  *
  * Returns a reason string when the destination is unsafe, or null when safe.
  */
@@ -122,8 +127,10 @@ export function validateRedirectDestination(finalUrl: string): string | null {
     return 'Redirect destination is not a valid URL.';
   }
 
-  if (parsed.protocol !== 'https:') {
-    return 'Redirect destination must use HTTPS.';
+  // Only http: and https: are expected; reject anything else (e.g. file:, data:)
+  // that could be used to access local resources.
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return 'Redirect destination uses an unsupported protocol.';
   }
 
   // WHATWG URL includes brackets for IPv6 hosts (e.g. "[::1]").  Strip them

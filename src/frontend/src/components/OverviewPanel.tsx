@@ -20,9 +20,12 @@ export function OverviewPanel({ report, permissionDetails, listingUrl }: Overvie
 
   // The small capability donut always shows the raw permissions risk.
   const capabilityScore = report.permissionsScore ?? report.score.value;
-  const hasStoreTrust =
-    report.scoringBasis === 'manifest-and-store' &&
-    report.storeTrustScore !== undefined;
+  // Store donut is always shown. Score is available when store data was fetched
+  // (fresh or cached); undefined means the store lookup was not applicable or failed.
+  const storeScore =
+    (report.scoringBasis === 'manifest-and-store' || report.scoringBasis === 'manifest-and-store-cached')
+      ? report.storeTrustScore
+      : undefined;
 
   // Human-readable explanation of what the store signals say (may be null).
   return (
@@ -47,12 +50,14 @@ export function OverviewPanel({ report, permissionDetails, listingUrl }: Overvie
         <div className="verdict-donuts">
           <div className="score-composite" aria-label="Score breakdown">
             <ScoreDonut score={capabilityScore} small label="Manifest" />
-            {hasStoreTrust && (
-              <>
-                <span className="score-composite-op" aria-hidden="true">+</span>
-                <ScoreDonut score={report.storeTrustScore!} small label="Store" variant="trust" />
-              </>
-            )}
+            <span className="score-composite-op" aria-hidden="true">+</span>
+            <ScoreDonut
+              score={storeScore ?? 0}
+              small
+              label="Store"
+              variant="trust"
+              unavailable={storeScore === undefined}
+            />
             <span className="score-composite-op" aria-hidden="true">+</span>
             <FindingsSeverityDonut signals={report.riskSignals} />
             <span className="score-composite-op" aria-hidden="true">=</span>

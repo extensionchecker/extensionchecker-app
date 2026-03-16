@@ -409,6 +409,14 @@ describe('AnalysisSignals', () => {
     expect(iconTexts).toContain('cancel');
   });
 
+  it('shows a tooltip explaining the store error on the error chip', () => {
+    render_report({ scoringBasis: 'manifest-store-unavailable' });
+    const errorChip = screen.getByText('Store (Error)').closest('.analysis-signal');
+    expect(errorChip).toHaveAttribute('title');
+    const title = errorChip?.getAttribute('title') ?? '';
+    expect(title.toLowerCase()).toContain('store metadata could not be retrieved');
+  });
+
   it('shows na chip for manifest-only basis', () => {
     render_report({ scoringBasis: 'manifest-only' });
     const icons = document.querySelectorAll('.material-symbols-outlined');

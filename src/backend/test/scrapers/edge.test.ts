@@ -1,17 +1,35 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fetchEdgeStoreData } from '../../src/scrapers/edge';
 
-function withNextData(detail: unknown, detailKey = 'addOnDetails'): string {
-  const nextData = {
-    props: {
-      pageProps: {
-        [detailKey]: detail
-      }
-    }
-  };
-  return `<html><head>
-    <script id="__NEXT_DATA__" type="application/json">${JSON.stringify(nextData)}</script>
-  </head><body></body></html>`;
+/**
+ * Builds a minimal Edge Add-ons page HTML shell with schema.org microdata
+ * <meta> tags — matching the actual server-rendered HTML structure used since
+ * the site migrated from Next.js SSR to a client-side SPA in early 2026.
+ */
+function withMicrodata(opts: {
+  ratingValue?: number;
+  ratingCount?: number;
+  userInteractionCount?: number;
+}): string {
+  const { ratingValue, ratingCount, userInteractionCount } = opts;
+  return `<!DOCTYPE html>
+<html lang="en-US">
+<head><meta charset="utf-8" /><title>Test Extension - Microsoft Edge Add-ons</title></head>
+<body>
+  <div id="root"></div>
+  ${userInteractionCount !== undefined ? `
+  <div itemscope itemtype="http://schema.org/WebApplication">
+    <span itemProp="interactionStatistic" itemscope itemType="http://schema.org/InteractionCounter">
+      <meta itemProp="userInteractionCount" content="${userInteractionCount}" />
+    </span>
+  </div>` : ''}
+  ${ratingValue !== undefined || ratingCount !== undefined ? `
+  <span itemprop="aggregateRating" itemscope itemtype="http://schema.org/AggregateRating">
+    ${ratingValue !== undefined ? `<meta itemprop="ratingValue" content="${ratingValue}">` : ''}
+    ${ratingCount !== undefined ? `<meta itemprop="ratingCount" content="${ratingCount}">` : ''}
+  </span>` : ''}
+</body>
+</html>`;
 }
 
 function mockFetch(html: string, status = 200): typeof fetch {
@@ -36,74 +54,57 @@ describe('fetchEdgeStoreData', () => {
     expect(await fetchEdgeStoreData('someextid', mockFetch('<html></html>', 403))).toBeNull();
   });
 
-  it('returns null when HTML has no __NEXT_DATA__ script', async () => {
-    expect(await fetchEdgeStoreData('someextid', mockFetch('<html><body><p>No data</p></body></html>'))).toBeNull();
+  it('returns null when HTML has no microdata tags', async () => {
+    expect(await fetchEdgeStoreData('someextid', mockFetch('<html><body><div id="root"></div></body></html>'))).toBeNull();
   });
 
-  it('returns null when __NEXT_DATA__ contains malformed JSON', async () => {
-    const html = '<html><head><script id="__NEXT_DATA__" type="application/json">INVALID{{</script></head></html>';
+  it('extracts ratingValue, ratingCount, and userInteractionCount from microdata', async () => {
+    const html = withMicrodata({ ratingValue: 4.5, ratingCount: 2607, userInteractionCount: 14551241 });
+    expect(await fetchEdgeStoreData('odfafepnkmbhccpbejgmiehpchacaeak', mockFetch(html))).toEqual({
+      rating: 4.5,
+      ratingCount: 2607,
+      userCount: 14551241
+    });
+  });
+
+  it('returns partial result when only ratingValue is present', async () => {
+    const html = withMicrodata({ ratingValue: 3.9 });
+    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ rating: 3.9 });
+  });
+
+  it('returns partial result when only userInteractionCount is present', async () => {
+    const html = withMicrodata({ userInteractionCount: 50000 });
+    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ userCount: 50000 });
+  });
+
+  it('returns partial result when only ratingCount is present', async () => {
+    const html = withMicrodata({ ratingCount: 120 });
+    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ ratingCount: 120 });
+  });
+
+  it('returns null when ratingValue is out of the 0-5 range', async () => {
+    const html = withMicrodata({ ratingValue: 9.9 });
     expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toBeNull();
   });
 
-  it('returns null when __NEXT_DATA__ has no recognizable add-on detail key', async () => {
-    const html = `<html><head>
-      <script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { pageProps: {} } })}</script>
-    </head></html>`;
-    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toBeNull();
+  it('handles content-first attribute ordering in meta tags', async () => {
+    const html = `<html><body>
+      <meta content="4.2" itemprop="ratingValue">
+      <meta content="300" itemprop="ratingCount">
+    </body></html>`;
+    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ rating: 4.2, ratingCount: 300 });
   });
 
-  it('returns null when __NEXT_DATA__ props is missing', async () => {
-    const html = `<html><head>
-      <script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ notProps: {} })}</script>
-    </head></html>`;
-    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toBeNull();
-  });
-
-  it('returns null when __NEXT_DATA__ pageProps is missing', async () => {
-    const html = `<html><head>
-      <script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { notPageProps: {} } })}</script>
-    </head></html>`;
-    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toBeNull();
-  });
-
-  it('extracts rating, ratingCount, and userCount from addOnDetails key', async () => {
-    const html = withNextData({ averageRating: 4.3, numberOfRatings: 150, activeInstallCount: 50000 });
-    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ rating: 4.3, ratingCount: 150, userCount: 50000 });
-  });
-
-  it('falls back to addOnDetail key', async () => {
-    const html = withNextData({ averageRating: 3.9, ratingsCount: 80, activeTotalInstalls: 20000 }, 'addOnDetail');
-    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ rating: 3.9, ratingCount: 80, userCount: 20000 });
-  });
-
-  it('falls back to addOnData key with installCount variant', async () => {
-    const html = withNextData({ averageRating: 4.0, installCount: 10000 }, 'addOnData');
-    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ rating: 4.0, userCount: 10000 });
-  });
-
-  it('falls back to extension key', async () => {
-    const html = withNextData({ averageRating: 4.7 }, 'extension');
-    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ rating: 4.7 });
-  });
-
-  it('returns null when neither rating nor userCount is present in detail', async () => {
-    const html = withNextData({ name: 'My Extension', description: 'A test extension' });
-    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toBeNull();
-  });
-
-  it('returns null when detail fails Zod schema validation (wrong types)', async () => {
-    // averageRating out of the 0-5 max range (schema has .max(5))
-    const html = withNextData({ averageRating: 'not-a-number', activeInstallCount: 1000 });
-    // Zod will fail parsing averageRating, so it won't be included; installCount may still work
-    const result = await fetchEdgeStoreData('someextid', mockFetch(html));
-    // averageRating is invalid, but installCount is valid - result should survive with just userCount
-    // Or if Zod strictness rejects the whole object, result is null
-    // Either way, just verify it doesn't throw
-    expect(result === null || typeof result === 'object').toBe(true);
+  it('handles mixed-case itemprop attribute (itemProp vs itemprop)', async () => {
+    const html = `<html><body>
+      <meta itemProp="ratingValue" content="4.0">
+      <meta itemProp="userInteractionCount" content="100000">
+    </body></html>`;
+    expect(await fetchEdgeStoreData('someextid', mockFetch(html))).toEqual({ rating: 4.0, userCount: 100000 });
   });
 
   it('constructs the correct Edge store URL', async () => {
-    const html = withNextData({ averageRating: 4.0 });
+    const html = withMicrodata({ ratingValue: 4.0 });
     const fetchMock = mockFetch(html);
     await fetchEdgeStoreData('nffknjpglkklphnibdiadeeeeailfnog', fetchMock);
     const calledUrl = String((fetchMock as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]);

@@ -35,21 +35,21 @@ export function toneForTrustScore(trust: number): Tone {
   return 'danger';
 }
 
-/** Human-readable access tier matching the 4-band scoring system. */
+/** Risk tier label for a capability score (high score = more risk). */
 export function scoreBand(score: number): string {
   if (score <= 25) {
-    return 'Minimal';
+    return 'Low';
   }
 
   if (score <= 50) {
-    return 'Moderate';
+    return 'Medium';
   }
 
   if (score <= 75) {
-    return 'Broad';
+    return 'High';
   }
 
-  return 'Complete';
+  return 'Critical';
 }
 
 /** RAGB colour for a capability score: green → yellow → orange → red (low = safe). */

@@ -2,19 +2,25 @@
  * Scrapes extension metadata from the Microsoft Edge Add-ons listing page.
  *
  * Strategy:
- *  The Edge Add-ons site is a Next.js application. The server-side-rendered
- *  HTML embeds a <script id="__NEXT_DATA__"> tag containing the full page
- *  props as JSON, including the add-on details object. We extract that block
- *  and navigate the object tree defensively.
+ *  The Edge Add-ons site migrated from Next.js SSR (which embedded a
+ *  __NEXT_DATA__ JSON block) to a client-side React SPA in early 2026.
+ *  The page HTML is now a static shell rendered server-side; all dynamic
+ *  extension data loads at runtime via internal API calls.
  *
- *  Field names in the JSON have varied across Edge Add-ons deployments, so the
- *  parser tries multiple known paths for each signal.
+ *  However, Microsoft still embeds schema.org microdata <meta> tags directly
+ *  in the server-rendered HTML shell, making them available without JavaScript:
+ *
+ *    <meta itemprop="ratingValue" content="4.5">
+ *    <meta itemprop="ratingCount" content="2607">
+ *    <meta itemProp="userInteractionCount" content="14551241" />
+ *
+ *  We extract these via regex pattern matching on the raw HTML. Developer URL
+ *  is not exposed via microdata on this page and cannot be recovered this way.
  *
  * Failure is non-fatal - null is returned for any network, parse, or
- * structure error so the caller can fall back to manifest-only scoring.
+ * structure mismatch so the caller falls back gracefully.
  */
 
-import { z } from 'zod';
 import type { ScrapedStoreData } from './types';
 
 const EDGE_STORE_BASE = 'https://microsoftedge.microsoft.com/addons/detail/';
@@ -23,47 +29,44 @@ const SCRAPE_TIMEOUT_MS = 8_000;
 const SCRAPE_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0';
 
-// Zod schema for the add-on detail object buried inside __NEXT_DATA__.
-// Accepts multiple possible field name variants observed across Edge Add-ons
-// page structure versions. All fields are optional to handle partial data.
-const EdgeAddOnDetailSchema = z.object({
-  averageRating: z.number().min(0).max(5).optional(),
-  numberOfRatings: z.number().int().min(0).optional(),
-  ratingsCount: z.number().int().min(0).optional(),
-  activeInstallCount: z.number().int().min(0).optional(),
-  activeTotalInstalls: z.number().int().min(0).optional(),
-  installCount: z.number().int().min(0).optional(),
-  // Developer homepage URL - field name varies across Edge Add-ons page versions.
-  developerWebsite: z.string().optional(),
-  developerHomepage: z.string().optional(),
-  developerUrl: z.string().optional()
-});
-
-function extractNextData(html: string): unknown {
-  // Next.js embeds page state in a <script id="__NEXT_DATA__"> tag.
-  const match = /<script\s+id="__NEXT_DATA__"\s+type="application\/json"[^>]*>([\s\S]*?)<\/script>/i.exec(html);
-  if (!match?.[1]) return null;
-  try {
-    return JSON.parse(match[1]);
-  } catch {
-    return null;
+/**
+ * Extracts a non-negative integer from a schema.org <meta itemprop> tag.
+ * Handles both attribute orderings (itemprop-first and content-first).
+ */
+function extractMicrodataInt(html: string, prop: string): number | undefined {
+  const escaped = prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns = [
+    new RegExp(`<meta\\s[^>]*?itemprop="${escaped}"[^>]*?content="(\\d+)"`, 'i'),
+    new RegExp(`<meta\\s[^>]*?content="(\\d+)"[^>]*?itemprop="${escaped}"`, 'i')
+  ];
+  for (const pattern of patterns) {
+    const m = pattern.exec(html);
+    if (m?.[1]) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
   }
+  return undefined;
 }
 
-function findAddOnDetail(data: unknown): unknown {
-  if (typeof data !== 'object' || data === null) return null;
-
-  // Navigate: props → pageProps → one of several known detail-object keys.
-  const props = (data as Record<string, unknown>)['props'];
-  if (typeof props !== 'object' || props === null) return null;
-
-  const pageProps = (props as Record<string, unknown>)['pageProps'];
-  if (typeof pageProps !== 'object' || pageProps === null) return null;
-
-  const pp = pageProps as Record<string, unknown>;
-
-  // Try known variant keys for the detail object.
-  return pp['addOnDetails'] ?? pp['addOnDetail'] ?? pp['addOnData'] ?? pp['extension'] ?? null;
+/**
+ * Extracts a non-negative float from a schema.org <meta itemprop> tag.
+ * Handles both attribute orderings (itemprop-first and content-first).
+ */
+function extractMicrodataFloat(html: string, prop: string): number | undefined {
+  const escaped = prop.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns = [
+    new RegExp(`<meta\\s[^>]*?itemprop="${escaped}"[^>]*?content="([0-9.]+)"`, 'i'),
+    new RegExp(`<meta\\s[^>]*?content="([0-9.]+)"[^>]*?itemprop="${escaped}"`, 'i')
+  ];
+  for (const pattern of patterns) {
+    const m = pattern.exec(html);
+    if (m?.[1]) {
+      const n = parseFloat(m[1]);
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+  }
+  return undefined;
 }
 
 export async function fetchEdgeStoreData(
@@ -98,35 +101,18 @@ export async function fetchEdgeStoreData(
     return null;
   }
 
-  const nextData = extractNextData(html);
-  const detail = findAddOnDetail(nextData);
+  const rawRating = extractMicrodataFloat(html, 'ratingValue');
+  const ratingCount = extractMicrodataInt(html, 'ratingCount');
+  const userCount = extractMicrodataInt(html, 'userInteractionCount');
 
-  const parsed = EdgeAddOnDetailSchema.safeParse(detail);
-  if (!parsed.success) return null;
+  // Clamp ratingValue to the valid 0–5 range; discard out-of-range values.
+  const rating = rawRating !== undefined && rawRating >= 0 && rawRating <= 5 ? rawRating : undefined;
 
-  const d = parsed.data;
-  const rating = d.averageRating;
-  const ratingCount = d.numberOfRatings ?? d.ratingsCount;
-  const userCount = d.activeInstallCount ?? d.activeTotalInstalls ?? d.installCount;
-
-  // Accept the first developer URL variant that looks like a safe HTTPS URL.
-  const rawDevUrl = d.developerWebsite ?? d.developerHomepage ?? d.developerUrl;
-  const developerUrl = rawDevUrl && isHttpsUrl(rawDevUrl) ? rawDevUrl : undefined;
-
-  if (rating === undefined && userCount === undefined && developerUrl === undefined) return null;
+  if (rating === undefined && ratingCount === undefined && userCount === undefined) return null;
 
   return {
     ...(rating !== undefined ? { rating } : {}),
     ...(ratingCount !== undefined ? { ratingCount } : {}),
-    ...(userCount !== undefined ? { userCount } : {}),
-    ...(developerUrl !== undefined ? { developerUrl } : {})
+    ...(userCount !== undefined ? { userCount } : {})
   };
-}
-
-function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === 'https:';
-  } catch {
-    return false;
-  }
 }
