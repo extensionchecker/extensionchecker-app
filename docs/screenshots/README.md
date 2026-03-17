@@ -1,6 +1,8 @@
 # Screenshots
 
-To give you an idea of what the application looks like and how it works, we've included a variety of screenshots from different browser extension stores. These images showcase the user interface, permissions, code scan findings, and trust signals for the extensions we analyzed. Click on any image to view it in full size.
+To give you an idea of what the application looks like and how it works, we've included a variety of screenshots from different browser extension stores. These images showcase the user interface, permissions, code scan findings, and trust signals for the extensions we analyzed. Click on any image to view it in full size. 
+
+You can also view an example PDF report that is generated from the application, which includes all of this information in a downloadable format: [Example Report](extensionchecker-chrome-web-store-duckduckgo-search-tracker-protection-2026.1.12.pdf).
 
 > [!NOTE]
 > Apple Safari continues to be a special case because there does not seem to be a direct way to download the extension for analysis, now that they are part of the App Store. If you have a way to fix this, please open an Issue or Pull Request!
