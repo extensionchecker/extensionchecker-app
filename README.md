@@ -21,9 +21,13 @@ extension's manifest and code.
 
 <img src="docs/logo/icon.png" alt="ExtensionChecker logo" width="100" />
 
-> **Live instance**: [app.extensionchecker.org](https://app.extensionchecker.org)
-> - running on the Cloudflare Workers free tier. If you need higher throughput
+> [!NOTE]
+> Check out the **Live Instance**: **[app.extensionchecker.org](https://app.extensionchecker.org)** running on the Cloudflare Workers free tier. If you need higher throughput
 > or want full control, [self-host your own instance](docs/SELF_HOSTING.md).
+
+Also, check out some [screenshots](docs/screenshots/README.md) of the app in action:
+
+<a href="docs/screenshots/README.md" target="_blank"><img src="docs/screenshots/chrome-bitwarden-1.png" alt="Screenshot of the application" width="250"></a>
 
 ---
 
