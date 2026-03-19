@@ -18,6 +18,9 @@ import type { ScrapedStoreData } from './types';
 const CHROME_STORE_BASE = 'https://chromewebstore.google.com/detail/';
 const SCRAPE_TIMEOUT_MS = 8_000;
 
+/** Maximum HTML response bytes to buffer from a store listing page (2 MB). */
+const MAX_HTML_RESPONSE_BYTES = 2 * 1024 * 1024;
+
 // A browser-like UA is required - Google returns a stripped page for bots.
 const SCRAPE_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -132,7 +135,9 @@ export async function fetchChromeStoreData(
 
   let html: string;
   try {
-    html = await response.text();
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > MAX_HTML_RESPONSE_BYTES) return null;
+    html = new TextDecoder().decode(buffer);
   } catch {
     return null;
   }

@@ -144,8 +144,13 @@ export function registerUploadRoute(app: Hono): void {
 
         await emitProgress('complete', 'Analysis complete.', 100);
         await stream.writeSSE({ event: 'result', data: JSON.stringify(reportResult.report) });
-      } catch {
-        await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Unexpected stream error.' }) });
+      } catch (error) {
+        console.error('Unhandled upload SSE stream error:', error);
+        try {
+          await stream.writeSSE({ event: 'error', data: JSON.stringify({ error: 'Unexpected stream error.' }) });
+        } catch {
+          // Stream already closed; nothing more we can do.
+        }
       }
     });
   });

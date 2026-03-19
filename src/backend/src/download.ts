@@ -3,6 +3,7 @@ import { ALLOWED_PACKAGE_EXTENSIONS, MAX_PACKAGE_SIZE_BYTES } from './constants'
 import { resolveExtensionIdCandidates } from './id-resolution';
 import { validatePublicFetchUrl, validateRedirectDestination } from './url-safety';
 import type { AnalyzeSource } from './schemas';
+import { readStreamBytesWithinLimit } from './bounded-stream-reader';
 
 /**
  * Opera Add-ons lists "virtual" built-in browser features (WhatsApp sidebar,
@@ -187,7 +188,20 @@ export async function downloadPackage(url: URL, fetchImpl: typeof fetch, timeout
 
   let bytes: ArrayBuffer;
   try {
-    bytes = await response.arrayBuffer();
+    if (response.body === null) {
+      bytes = await response.arrayBuffer();
+      if (bytes.byteLength > maxBytes) {
+        throw new Error(`Package exceeds size limit (${Math.round(maxBytes / (1024 * 1024))} MB max).`);
+      }
+    } else {
+      const limitedBytes = await readStreamBytesWithinLimit(
+        response.body,
+        maxBytes,
+        `Package exceeds size limit (${Math.round(maxBytes / (1024 * 1024))} MB max).`,
+        signal
+      );
+      bytes = limitedBytes.slice().buffer;
+    }
   } catch (error) {
     if (signal.aborted) {
       throw new Error('Extension package download timed out. The package may be very large. Try uploading the file directly instead.');

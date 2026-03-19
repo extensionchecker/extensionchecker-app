@@ -42,8 +42,7 @@ export function createApp(options: CreateAppOptions = {}): Hono {
 
   app.onError((error, context) => {
     console.error('Unhandled backend error:', error);
-    const message = error instanceof Error ? error.message : 'Internal server error.';
-    return context.json({ error: message }, 500);
+    return context.json({ error: 'Internal server error.' }, 500);
   });
 
   registerSecurityHeaders(app);

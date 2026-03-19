@@ -135,7 +135,7 @@ sequenceDiagram
     FW->>BW: Forward + inject token
 
     Note over BW: CORS + Auth + Rate Limit
-    Note over BW: Zod validation
+    Note over BW: Zod validation (ID value ≤ 256 chars)
     Note over BW: ID format validation<br/>(regex per ecosystem)
 
     BW->>BW: resolveExtensionIdCandidates(id)
@@ -274,6 +274,12 @@ flowchart TD
 Every API request passes through this ordered chain of security controls
 before any business logic executes. Token comparison uses a constant-time
 XOR-over-padded-buffers function to prevent timing side-channel attacks.
+Security headers applied to every response include `X-Frame-Options: DENY`,
+`Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`,
+`Strict-Transport-Security` (1-year, includeSubDomains, preload),
+`X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+`X-DNS-Prefetch-Control: off`, `X-Permitted-Cross-Domain-Policies: none`,
+and a strict `Permissions-Policy` (including `browsing-topics=()`).
 
 ```mermaid
 flowchart TD

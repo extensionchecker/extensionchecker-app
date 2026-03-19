@@ -139,6 +139,7 @@ graph TD
 | T-4 | Archive with malicious filenames | A5: Archive processing | ZIP entries with path traversal (`../`) or null bytes to confuse parsers. | Null byte rejection; path traversal rejection (`../` and leading `/`); no disk writes (memory-only extraction). | ✅ Mitigated |
 | T-5 | Localization injection | A5: Archive processing | Crafted `_locales/` files that return malicious strings for manifest name resolution. | Locale values are treated as display strings only; React auto-escapes all rendered text; no `dangerouslySetInnerHTML` usage in report display. | ✅ Mitigated |
 | T-6 | Supply chain - compromised npm dependency | Build pipeline | Malicious code injected via a compromised transitive dependency (e.g., fflate, marked, jsPDF). | No runtime dependency pinning or SRI for bundled libs; standard npm lockfile used. | ⚠️ Partial |
+| T-7 | Unbounded ID field length | A4: Extension IDs | An oversized extension ID string could cause downstream log injection, regex backtracking, or resource waste during URL construction. | Zod schema enforces `.max(256)` on the `AnalyzeRequestSchema` `value` field for ID-type sources, rejecting payloads before any processing begins. | ✅ Mitigated |
 
 ---
 
@@ -156,13 +157,13 @@ graph TD
 
 | ID | Threat | Attack Surface | Description | Controls in Place | Status |
 |----|--------|---------------|-------------|-------------------|--------|
-| I-1 | Verbose error messages leak internals | A1: API endpoints | Stack traces, internal paths, or library versions exposed in error responses. | Error responses use generic messages (`"manifest.json is missing..."`, `"Failed to download..."`); no stack traces in production responses. | ✅ Mitigated |
+| I-1 | Verbose error messages leak internals | A1: API endpoints | Stack traces, internal paths, or library versions exposed in error responses. | All route handlers use context-appropriate fixed strings for expected errors. The global `app.onError` handler returns a fixed generic message (`"Internal server error."`) for any unhandled exception — raw `error.message` is never forwarded to the client. Full details logged server-side via `console.error`. | ✅ Mitigated |
 | I-2 | Timing side-channel on token validation | A1: API endpoints | Token comparison using `===` leaks token length/content through response timing differences. | Token compared with a constant-time XOR-over-padded-buffers function. Loop always runs for `max(len(a), len(b))` iterations; length mismatch accumulated via XOR so no branch is taken on first difference. | ✅ Mitigated |
 | I-3 | IP address exposure in rate limit headers | A1: API endpoints | Rate limit response headers (`x-ratelimit-remaining-*`) confirm the server's view of the client's IP. | Headers expose counter state but not the raw IP itself; IP is already known to the client. Minimal additional disclosure. | ✅ Mitigated |
 | I-4 | Extension package content exposure | A5: Archive processing | Full extension package held in Worker memory could leak through memory safety bugs. | Cloudflare Workers use V8 isolates (memory-safe); no disk writes; package bytes discarded after analysis. | ✅ Mitigated |
 | I-5 | Server version/technology fingerprinting | A1: API endpoints | Response headers or error messages reveal technology stack. | No `Server` header set; no version info in responses. `X-Content-Type-Options: nosniff` prevents MIME sniffing. | ✅ Mitigated |
-| I-6 | Report data exposed to third-party JS libraries | A8: Frontend | jsPDF and marked libraries process report data; if compromised, they could exfiltrate. | Libraries loaded from npm bundle (not CDN); CSP not yet implemented; jsPDF operates on data already shown to user. | ⚠️ Partial |
-| I-7 | Internal error messages leaked via SSE stream | A1: API endpoints | Unexpected exceptions caught by the outermost SSE error handler could forward raw `error.message` (internal paths, library versions) to the client. | The outer SSE catch emits a fixed generic string (`"Unexpected analysis error."`) and logs details server-side only. Inner catches for expected error paths (download failures, archive errors) still emit context-appropriate user-facing messages. | ✅ Mitigated |
+| I-6 | Report data exposed to third-party JS libraries | A8: Frontend | jsPDF and marked libraries process report data; if compromised, they could exfiltrate. | Libraries loaded from npm bundle (not CDN); jsPDF operates on data already shown to user. Backend API responses include `content-security-policy: default-src 'none'; frame-ancestors 'none'`, but the **Frontend Worker does not yet set a CSP on HTML page responses**, so script-src restrictions are not enforced in the browser context. | ⚠️ Partial |
+| I-7 | Internal error messages leaked via SSE stream | A1: API endpoints | Unexpected exceptions caught by the outermost SSE error handler could forward raw `error.message` (internal paths, library versions) to the client. | Both `route-analyze.ts` and `route-upload.ts` outer SSE catches emit a fixed generic string (`"Unexpected analysis error."`) and log full details server-side via `console.error`. Inner catches for expected error paths (download failures, archive errors) still emit context-appropriate user-facing messages. The `route-upload.ts` outer catch uses a double-catch pattern for stream-closed safety. | ✅ Mitigated |
 
 ---
 
@@ -180,6 +181,7 @@ graph TD
 | D-8 | ReDoS in input parsing | A3: URLs, A4: IDs | Crafted input triggers catastrophic backtracking in regex. | URL parsing uses standard `new URL()` API (not regex); ID validation uses simple non-backtracking regexes (`/^[a-p]{32}$/`). | ✅ Mitigated |
 | D-9 | CPU exhaustion via complex manifest | A6: Manifest parsing | Manifest with extremely large permission arrays or deeply nested structures. | Zod schema enforces array-of-strings for permissions; JSON body capped at 16 KB for /api/analyze; manifest.json capped at 5 MB (from archive). | ✅ Mitigated |
 | D-10 | Code scanner ReDoS via adversarial JS | A5: Archive processing | An extension package contains JS files crafted to maximize backtracking in the lite regex detectors, exhausting CPU within the Worker budget. | All scanner regexes are linear (`/g` with `RegExp.exec` iteration, no nested quantifiers); total decompressed JS budget capped at 500 KB; wall-clock budget guard (3 s) terminates early if exceeded; per-file limit (200 KB) prevents single large-file attacks. | ✅ Mitigated |
+| D-11 | Scraper HTML response amplification | A7: External downloads | A compromised or misbehaving extension store returns a multi-gigabyte HTML page to exhaust Worker memory during metadata scraping. | All HTML scrapers (Chrome, Edge, Opera) enforce a `MAX_HTML_RESPONSE_BYTES` limit of 2 MB. The response body is consumed as an `ArrayBuffer` and its `byteLength` is checked before any HTML parsing begins; oversized responses are rejected. | ✅ Mitigated |
 
 ---
 
@@ -187,7 +189,7 @@ graph TD
 
 | ID | Threat | Attack Surface | Description | Controls in Place | Status |
 |----|--------|---------------|-------------|-------------------|--------|
-| E-1 | SSRF via user-supplied URL | A3: User-supplied URLs | Attacker provides a URL pointing to internal services, cloud metadata, or private networks. | `validatePublicFetchUrl()`: HTTPS-only; reject localhost, `.local`, private IPv4 (10/8, 127/8, 169.254/16, 172.16/12, 192.168/16), private IPv6 (::1, fc00::/7, fe80::/10); strict host allowlist. | ✅ Mitigated |
+| E-1 | SSRF via user-supplied URL | A3: User-supplied URLs | Attacker provides a URL pointing to internal services, cloud metadata, or private networks. | `validatePublicFetchUrl()`: HTTPS-only; reject localhost, `.local`; full RFC 6890 private IPv4 coverage — `0.0.0.0/8`, `10/8`, `100.64/10` (CGNAT), `127/8`, `169.254/16`, `172.16/12`, `192.0.0/24`, `192.0.2/24` (TEST-NET-1), `192.168/16`, `198.18/15` (benchmark), `198.51.100/24` (TEST-NET-2), `203.0.113/24` (TEST-NET-3), `240/4` (reserved/broadcast); private IPv6 (::1, fc00::/7, fe80::/10); strict host allowlist. | ✅ Mitigated |
 | E-2 | SSRF via DNS rebinding | A3: User-supplied URLs | URL resolves to public IP initially, then re-resolves to internal IP during fetch. | URL validated before fetch; host must be in the allowlist (store-specific domains only); Cloudflare Workers resolve DNS at the platform level. | ✅ Mitigated |
 | E-3 | SSRF via HTTP redirect from store | A7: External downloads | Store returns a 3xx redirect to an internal or unauthorized URL. | After following redirects, `response.url` (the final URL) is validated by `validateRedirectDestination()`: rejects non-HTTPS destinations, localhost/`.local` hosts, all private IPv4 ranges, and IPv6 loopback/ULA/link-local/IPv4-mapped (`::ffff:*`) ranges. The strict store allowlist is not re-applied (CDN redirects from legitimate stores are permitted) but the SSRF surface is eliminated. | ✅ Mitigated |
 | E-4 | Prototype pollution via JSON.parse | A6: Manifest parsing | Crafted JSON with `__proto__` keys to pollute Object prototype. | Zod schema explicitly defines expected keys; `passthrough()` on unknown keys but values are not spread onto objects. V8 has hardened `JSON.parse` against prototype pollution. | ✅ Mitigated |
@@ -195,27 +197,28 @@ graph TD
 | E-6 | Unauthorized backend access (no token) | A1: API endpoints | Direct requests to backend Worker bypassing the Frontend Worker and its token injection. | Backend has no public route in production; reachable only via Cloudflare service binding from Frontend Worker. API token check enforced when configured. | ✅ Mitigated |
 | E-7 | Extension ID injection into download URL | A4: Extension IDs | Crafted ID value injects path segments or query parameters into constructed download URLs. | Chrome/Edge IDs validated against `/^[a-p]{32}$/`; Firefox/Opera IDs passed through `encodeURIComponent()`; download URL templates use string interpolation with encoded values. | ✅ Mitigated |
 | E-8 | SSRF via IPv4-mapped IPv6 addresses | A3: User-supplied URLs, A7: External downloads | An attacker supplies a URL containing an IPv4-mapped IPv6 address (e.g. `[::ffff:7f00:1]` which maps to `127.0.0.1`) to bypass private-IP checks that only inspect the IPv4 representation. | `isPrivateIPv6()` explicitly checks for the `::ffff:` prefix in addition to loopback (`::1`), ULA (`fc*/fd*`), and link-local (`fe80*`) ranges. Both `validatePublicFetchUrl()` (initial URL) and `validateRedirectDestination()` (post-redirect URL) run this check. | ✅ Mitigated |
+| E-9 | Clickjacking / UI redressing | A8: Client-side rendering | Attacker frames the ExtensionChecker SPA in an `<iframe>` on a malicious page to trick users into performing unintended actions (e.g., uploading a file). | Backend API responses include `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'`. However, the **Frontend Worker does not currently add frame-busting headers to static asset / HTML responses**, so the SPA page itself can still be framed. | ⚠️ Partial |
 
 ---
 
 ## STRIDE Findings Summary
 
 ```mermaid
-pie title Mitigation Status (32 findings)
-    "Mitigated" : 25
-    "Partial" : 6
+pie title Mitigation Status (35 findings)
+    "Mitigated" : 27
+    "Partial" : 7
     "Not Mitigated" : 1
 ```
 
 | Category | Total | ✅ Mitigated | ⚠️ Partial | ❌ Not Mitigated |
 |----------|-------|-------------|-----------|------------------|
 | **Spoofing** | 5 | 4 | 1 | 0 |
-| **Tampering** | 6 | 5 | 1 | 0 |
+| **Tampering** | 7 | 6 | 1 | 0 |
 | **Repudiation** | 3 | 0 | 2 | 1 |
 | **Information Disclosure** | 7 | 6 | 1 | 0 |
-| **Denial of Service** | 10 | 8 | 2 | 0 |
-| **Elevation of Privilege** | 8 | 8 | 0 | 0 |
-| **Total** | **32** | **25** | **6** | **1** |
+| **Denial of Service** | 11 | 9 | 2 | 0 |
+| **Elevation of Privilege** | 9 | 8 | 1 | 0 |
+| **Total** | **35** | **27** | **7** | **1** |
 
 ---
 
@@ -235,7 +238,8 @@ pie title Mitigation Status (32 findings)
 | S-2 | IP spoofing for rate limits | In non-Cloudflare deployments, `cf-connecting-ip` is unavailable. Document that self-hosters behind reverse proxies must configure trusted proxy headers. |
 | D-6 | Distributed rate limit bypass | Consider Cloudflare Rate Limiting (platform feature) or Durable Objects for persistent, distributed rate limit state. |
 | R-3 | Rate limit reset on restart | Migrate to persistent rate limiting (Cloudflare Durable Objects or KV) when operational hardening is prioritized. |
-| I-6 | Third-party JS library exfiltration | Implement a `Content-Security-Policy` header to restrict script sources, `connect-src`, and `default-src`. |
+| I-6 | Third-party JS library exfiltration | Backend API CSP is in place (`default-src 'none'`). Remaining gap: implement a `Content-Security-Policy` header on the **Frontend Worker's HTML responses** to restrict `script-src`, `connect-src`, and `default-src` in the browser context. |
+| E-9 | Clickjacking / UI redressing | Add `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'` to the Frontend Worker's static asset / HTML responses. Backend API already sets both. |
 
 ### Low Priority / Accepted Risk
 
@@ -279,9 +283,12 @@ graph TB
         ZodVal["Zod Schema"]
         SizeLimit["Size Limits"]
         SecHeaders["Security Headers"]
+        CSP["Content-Security-Policy"]
         HTTPS["HTTPS Only"]
         Allowlist["Host Allowlist"]
+        ScraperLimit["Scraper Response Limits"]
         ReactEscape["React Auto-Escape"]
+        GenericErrors["Generic Error Responses"]
     end
 
     CasualUser --> API
@@ -290,14 +297,14 @@ graph TB
     Attacker --> URLInput & Upload & Archive & ExtFetch
     SupplyChain --> BuildPipe
 
-    API --> CORS & Token & RateLimit & SizeLimit
+    API --> CORS & Token & RateLimit & SizeLimit & GenericErrors
     Upload --> SizeLimit & ZIPVal
     URLInput --> URLVal & HTTPS & Allowlist
-    IDInput --> IDVal
+    IDInput --> IDVal & ZodVal
     Archive --> ZIPVal
     Manifest --> ZodVal
-    ExtFetch --> HTTPS & Allowlist
-    ClientSide --> ReactEscape & SecHeaders
+    ExtFetch --> HTTPS & Allowlist & ScraperLimit
+    ClientSide --> ReactEscape & SecHeaders & CSP
     BuildPipe -.->|"Partial"| Controls
 ```
 
@@ -314,6 +321,6 @@ This threat model should be reviewed:
 
 ---
 
-_Last reviewed: 2026-03-15_
-_Version: 1.1_
+_Last reviewed: 2026-03-19_
+_Version: 1.2_
 _Scope: ExtensionChecker v0.1.0 - manifest-first analysis, no persistence, no user accounts_

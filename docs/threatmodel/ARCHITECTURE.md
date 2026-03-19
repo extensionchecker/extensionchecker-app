@@ -158,8 +158,10 @@ The Backend Worker handles all business logic:
 - **Rate limiting** - in-memory per-IP and global rate limiter with
   per-minute and per-day windows; map size capped at 20,000 keys.
 - **Input validation** - Zod schemas for all request bodies.
-- **URL safety** - SSRF protection: HTTPS-only, private IP rejection
-  (including IPv4-mapped IPv6 `::ffff:*` addresses), host allowlist.
+- **URL safety** - SSRF protection: HTTPS-only, full RFC 6890 private IPv4
+  rejection (13 ranges including CGNAT, TEST-NETs, benchmark, reserved),
+  private IPv6 rejection (including IPv4-mapped `::ffff:*` addresses),
+  host allowlist.
 - **Post-redirect validation** - after following HTTP redirects, the final
   `response.url` is checked against private-IP and localhost gates to
   prevent SSRF via open redirects on store domains.
@@ -172,6 +174,17 @@ The Backend Worker handles all business logic:
   defenses.
 - **Analysis** - delegates to the engine for manifest analysis and risk
   scoring.
+- **Security headers** - all API responses include `X-Frame-Options: DENY`,
+  `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`,
+  `Strict-Transport-Security` (1-year, includeSubDomains, preload),
+  `X-DNS-Prefetch-Control: off`, `X-Permitted-Cross-Domain-Policies: none`,
+  and a strict `Permissions-Policy` (including `browsing-topics=()`).
+- **Scraper size limits** - HTML scrapers for Chrome, Edge, and Opera enforce
+  a 2 MB response size cap (`MAX_HTML_RESPONSE_BYTES`) before parsing to
+  prevent memory exhaustion from oversized store pages.
+- **Generic error handling** - the global `app.onError` handler returns a
+  fixed `"Internal server error."` message; raw `error.message` is never
+  forwarded to clients.
 
 **Backend source modules** (`src/backend/src/`):
 

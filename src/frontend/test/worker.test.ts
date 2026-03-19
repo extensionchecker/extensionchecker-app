@@ -23,6 +23,38 @@ describe('handleFrontendWorkerRequest', () => {
       await handleFrontendWorkerRequest(request, env);
       expect(env.ASSETS.fetch).toHaveBeenCalled();
     });
+
+    it('adds frontend security headers to HTML asset responses', async () => {
+      const env = makeEnv({
+        ASSETS: {
+          fetch: vi.fn().mockResolvedValue(new Response('<!doctype html>', {
+            headers: { 'content-type': 'text/html; charset=utf-8' }
+          }))
+        }
+      });
+
+      const response = await handleFrontendWorkerRequest(new Request('https://app.example.com/'), env);
+
+      expect(response.headers.get('x-frame-options')).toBe('DENY');
+      expect(response.headers.get('strict-transport-security')).toContain('preload');
+      expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+      expect(response.headers.get('content-security-policy')).toContain("connect-src 'self'");
+    });
+
+    it('does not add document CSP to non-HTML asset responses', async () => {
+      const env = makeEnv({
+        ASSETS: {
+          fetch: vi.fn().mockResolvedValue(new Response('body { color: red; }', {
+            headers: { 'content-type': 'text/css' }
+          }))
+        }
+      });
+
+      const response = await handleFrontendWorkerRequest(new Request('https://app.example.com/assets/index.css'), env);
+
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(response.headers.get('content-security-policy')).toBeNull();
+    });
   });
 
   describe('backend routing', () => {

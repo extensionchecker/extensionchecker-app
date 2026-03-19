@@ -8,7 +8,7 @@ export const AnalyzeRequestSchema = z.object({
     }),
     z.object({
       type: z.literal('id'),
-      value: z.string().min(1)
+      value: z.string().min(1).max(256)
     })
   ])
 });

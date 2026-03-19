@@ -1064,7 +1064,7 @@ describe('backend app', () => {
 
     expect(response.status).toBe(500);
     const body = await response.json() as { error: string };
-    expect(body.error).toBe('Simulated unexpected failure');
+    expect(body.error).toBe('Internal server error.');
   });
 
   it('returns SSE error event when an unexpected exception occurs in analyze streaming', async () => {

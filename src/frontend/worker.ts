@@ -13,6 +13,21 @@ export type FrontendWorkerEnv = {
   API_ACCESS_TOKEN?: string;
 };
 
+const FRONTEND_PERMISSIONS_POLICY = 'accelerometer=(), ambient-light-sensor=(), autoplay=(), browsing-topics=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()';
+const FRONTEND_CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "object-src 'none'",
+  "connect-src 'self'",
+  "img-src 'self' data: blob:",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "worker-src 'self' blob:"
+].join('; ');
+
 function isBackendRoute(url: URL): boolean {
   return url.pathname === '/health' || url.pathname.startsWith('/api/');
 }
@@ -43,6 +58,29 @@ function injectTokenHeader(request: Request, token: string | undefined): Request
   return new Request(request, { headers });
 }
 
+function applyFrontendSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set('x-content-type-options', 'nosniff');
+  headers.set('x-frame-options', 'DENY');
+  headers.set('referrer-policy', 'no-referrer');
+  headers.set('permissions-policy', FRONTEND_PERMISSIONS_POLICY);
+  headers.set('cross-origin-resource-policy', 'same-origin');
+  headers.set('cross-origin-opener-policy', 'same-origin');
+  headers.set('strict-transport-security', 'max-age=31536000; includeSubDomains; preload');
+  headers.set('x-dns-prefetch-control', 'off');
+  headers.set('x-permitted-cross-domain-policies', 'none');
+
+  if (headers.get('content-type')?.toLowerCase().includes('text/html')) {
+    headers.set('content-security-policy', FRONTEND_CONTENT_SECURITY_POLICY);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
 export async function handleFrontendWorkerRequest(request: Request, env: FrontendWorkerEnv): Promise<Response> {
   const requestUrl = new URL(request.url);
 
@@ -63,7 +101,8 @@ export async function handleFrontendWorkerRequest(request: Request, env: Fronten
     );
   }
 
-  return env.ASSETS.fetch(request);
+  const assetResponse = await env.ASSETS.fetch(request);
+  return applyFrontendSecurityHeaders(assetResponse);
 }
 
 export default {

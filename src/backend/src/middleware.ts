@@ -10,10 +10,13 @@ export function registerSecurityHeaders(app: Hono): void {
     context.header('x-content-type-options', 'nosniff');
     context.header('x-frame-options', 'DENY');
     context.header('referrer-policy', 'no-referrer');
-    context.header('permissions-policy', 'accelerometer=(), ambient-light-sensor=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
+    context.header('permissions-policy', 'accelerometer=(), ambient-light-sensor=(), autoplay=(), browsing-topics=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
     context.header('cross-origin-resource-policy', 'same-origin');
     context.header('cross-origin-opener-policy', 'same-origin');
-    context.header('strict-transport-security', 'max-age=31536000; includeSubDomains');
+    context.header('strict-transport-security', 'max-age=31536000; includeSubDomains; preload');
+    context.header('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
+    context.header('x-dns-prefetch-control', 'off');
+    context.header('x-permitted-cross-domain-policies', 'none');
   });
 }
 

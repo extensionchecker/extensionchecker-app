@@ -23,6 +23,7 @@ import { buildReportFromManifest } from './report';
 import { dispatchStoreDataFetch } from './scrapers/index';
 import { wantsEventStream } from './middleware';
 import type { RouteDeps } from './route-deps';
+import { readRequestTextWithinLimit } from './bounded-stream-reader';
 
 const JS_EXTRACTION_OPTIONS = {
   maxTotalBytes: MAX_CODE_SCAN_BYTES_TOTAL,
@@ -87,13 +88,24 @@ export function registerAnalyzeRoute(app: Hono, deps: RouteDeps): void {
       return context.json({ error: 'Analyze request body is too large.' }, 413);
     }
 
-    const rawBody = await context.req.text().catch(() => null);
-    if (rawBody === null) {
-      return context.json({ error: 'Invalid request body.' }, 400);
+    const rawBody = await readRequestTextWithinLimit(
+      context.req.raw,
+      MAX_ANALYZE_REQUEST_BODY_BYTES,
+      'Analyze request body is too large.'
+    ).catch((error) => {
+      if (error instanceof Error && error.message === 'Analyze request body is too large.') {
+        return error.message;
+      }
+
+      return null;
+    });
+
+    if (rawBody === 'Analyze request body is too large.') {
+      return context.json({ error: rawBody }, 413);
     }
 
-    if (new TextEncoder().encode(rawBody).byteLength > MAX_ANALYZE_REQUEST_BODY_BYTES) {
-      return context.json({ error: 'Analyze request body is too large.' }, 413);
+    if (rawBody === null) {
+      return context.json({ error: 'Invalid request body.' }, 400);
     }
 
     let body: unknown = null;
