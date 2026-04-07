@@ -1,0 +1,6 @@
+# Prevent TypeScript build artifacts from being committed alongside source files.
+# These are emitted by tsc into dist/, but misconfigurations can place them here.
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
