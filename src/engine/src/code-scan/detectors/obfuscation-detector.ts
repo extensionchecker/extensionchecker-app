@@ -14,8 +14,10 @@ import { findMatches } from './match-helpers';
 const ATOB_RE = /\batob\s*\(/g;
 // Dean Edwards p,a,c,k,e,d packer: eval(function(p,a,c,k,e,... pattern
 const EVAL_PACK_RE = /\beval\s*\(\s*function\s*\(\s*[a-zA-Z]\s*,\s*[a-zA-Z]/g;
-// 5 or more consecutive quoted hex strings in an array literal
-const HEX_ARRAY_RE = /\[\s*(?:"0x[0-9a-fA-F]+"|\s*,\s*"0x[0-9a-fA-F]+")+\s*\]/g;
+// 5 or more consecutive quoted hex strings in an array literal.
+// Structured as: first element, then 4+ comma-separated elements, to avoid
+// ReDoS from ambiguous \s* alternation in a repeated group.
+const HEX_ARRAY_RE = /\[\s*"0x[0-9a-fA-F]+"(?:\s*,\s*"0x[0-9a-fA-F]+"){4,}\s*\]/g;
 
 export function detectObfuscation(path: string, content: string): CodeFinding[] {
   return [

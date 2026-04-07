@@ -67,11 +67,6 @@ export function FindingsSeverityDonut({ signals }: FindingsSeverityDonutProps) {
     angle += span;
   }
 
-  const centerColor =
-    counts.critical > 0 ? SEV_COLORS.critical :
-    counts.high     > 0 ? SEV_COLORS.high     :
-    counts.medium   > 0 ? SEV_COLORS.medium   : SEV_COLORS.low;
-
   const centerValue = total;
   const bandLabel   = total === 1 ? 'finding' : 'findings';
 

@@ -61,7 +61,6 @@ export function drawVerdictCard(
 
   // ── Verdict text block (full width, flush left) ───────────────────────────
   const textX = margin + 14;
-  const textW = contentWidth - 28;
   let   textY = y + TEXT_TOP_PAD;
 
   doc.setFont('helvetica', 'bold');

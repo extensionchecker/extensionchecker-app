@@ -1,5 +1,5 @@
 import { type PackageKind, detectPackageKind } from './archive';
-import { ALLOWED_PACKAGE_EXTENSIONS, MAX_PACKAGE_SIZE_BYTES } from './constants';
+import { ALLOWED_PACKAGE_EXTENSIONS } from './constants';
 import { resolveExtensionIdCandidates } from './id-resolution';
 import { validatePublicFetchUrl, validateRedirectDestination } from './url-safety';
 import type { AnalyzeSource } from './schemas';

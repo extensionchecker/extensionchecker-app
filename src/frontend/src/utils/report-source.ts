@@ -1,7 +1,11 @@
 import type { AnalysisReport } from '@extensionchecker/shared';
 import type { DetectedBrowser } from '../types';
-import { CHROME_EXTENSION_ID_REGEX, SAFARI_APP_STORE_ID_REGEX } from '../constants';
 import { browserDetectionIconSrc } from './browser-detection';
+
+/** Returns true when host exactly matches domain or is a subdomain of it. */
+function hostMatches(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
 
 export function sourceStoreBrowser(report: AnalysisReport): DetectedBrowser | null {
   if (report.source.type === 'file') {
@@ -42,23 +46,23 @@ export function sourceStoreBrowser(report: AnalysisReport): DetectedBrowser | nu
     const parsed = new URL(value);
     const host = parsed.hostname.toLowerCase();
 
-    if (host.includes('chromewebstore.google.com') || host.includes('chrome.google.com') || host.includes('clients2.google.com')) {
+    if (hostMatches(host, 'chromewebstore.google.com') || hostMatches(host, 'chrome.google.com') || hostMatches(host, 'clients2.google.com')) {
       return 'chrome';
     }
 
-    if (host.includes('addons.mozilla.org')) {
+    if (hostMatches(host, 'addons.mozilla.org')) {
       return 'firefox';
     }
 
-    if (host.includes('microsoftedge.microsoft.com') || host.includes('edge.microsoft.com')) {
+    if (hostMatches(host, 'microsoftedge.microsoft.com') || hostMatches(host, 'edge.microsoft.com')) {
       return 'edge';
     }
 
-    if (host.includes('addons.opera.com')) {
+    if (hostMatches(host, 'addons.opera.com')) {
       return 'opera';
     }
 
-    if (host.includes('safari') || host.includes('apple.com')) {
+    if (hostMatches(host, 'apps.apple.com') || hostMatches(host, 'safari-extensions.apple.com')) {
       return 'safari';
     }
   } catch {

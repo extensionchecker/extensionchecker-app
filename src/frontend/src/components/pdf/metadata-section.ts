@@ -32,7 +32,6 @@ function drawMetadataCard(
   const labelFontSize   = 8.5;
   const valueFontSize   = 9.5;
   const innerW          = w - 20;
-  const lineH           = 13;
   const sectionGap      = 6;
 
   let height = 22; // top padding + heading

@@ -1,6 +1,11 @@
 import type { AnalysisReport, RiskSignal } from '@extensionchecker/shared';
 import type { RGB } from './types';
 
+/** Returns true when host exactly matches domain or is a subdomain of it. */
+function hostMatches(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
 export function getStoreLabel(report: AnalysisReport): string {
   if (report.source.type === 'file') {
     return 'Uploaded package';
@@ -24,15 +29,15 @@ export function getStoreLabel(report: AnalysisReport): string {
     const parsed = new URL(value);
     const host = parsed.hostname.toLowerCase();
 
-    if (host.includes('chromewebstore.google.com') || host.includes('chrome.google.com') || host.includes('clients2.google.com')) {
+    if (hostMatches(host, 'chromewebstore.google.com') || hostMatches(host, 'chrome.google.com') || hostMatches(host, 'clients2.google.com')) {
       return 'Chrome Web Store';
     }
 
-    if (host.includes('addons.mozilla.org')) {
+    if (hostMatches(host, 'addons.mozilla.org')) {
       return 'Firefox Add-ons';
     }
 
-    if (host.includes('safari') || host.includes('apple.com')) {
+    if (hostMatches(host, 'apps.apple.com') || hostMatches(host, 'safari-extensions.apple.com')) {
       return 'Safari Extensions';
     }
   } catch {
