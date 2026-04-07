@@ -3,6 +3,11 @@ import type { AnalysisReport } from '@extensionchecker/shared';
 const UNRESOLVED_LOCALIZED_NAME_PATTERN = /^__MSG_[A-Za-z0-9_.@-]+__$/;
 const CHROME_EXTENSION_ID_PATTERN = /^[a-p]{32}$/;
 
+/** Returns true when `host` is exactly `domain` or a subdomain of it. */
+function hostMatches(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
 function tryDecodeUriComponent(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -57,21 +62,21 @@ function fallbackNameFromUrl(urlString: string): string | null {
   const host = parsed.hostname.toLowerCase();
   const segments = parsed.pathname.split('/').filter(Boolean);
 
-  if (host.includes('chromewebstore.google.com') || host.includes('chrome.google.com')) {
+  if (hostMatches(host, 'chromewebstore.google.com') || hostMatches(host, 'chrome.google.com')) {
     const detailIndex = segments.findIndex((segment) => segment === 'detail');
     if (detailIndex >= 0 && segments[detailIndex + 1]) {
       return normalizeHumanLabel(segments[detailIndex + 1] ?? '');
     }
   }
 
-  if (host.includes('addons.mozilla.org')) {
+  if (hostMatches(host, 'addons.mozilla.org')) {
     const addonIndex = segments.findIndex((segment) => segment === 'addon');
     if (addonIndex >= 0 && segments[addonIndex + 1]) {
       return normalizeHumanLabel(segments[addonIndex + 1] ?? '');
     }
   }
 
-  if (host.includes('microsoftedge.microsoft.com')) {
+  if (hostMatches(host, 'microsoftedge.microsoft.com')) {
     const detailIndex = segments.findIndex((segment) => segment === 'detail');
     if (detailIndex >= 0 && segments[detailIndex + 1]) {
       return normalizeHumanLabel(segments[detailIndex + 1] ?? '');
