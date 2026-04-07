@@ -7,6 +7,13 @@ export default defineConfig({
       '@docs': new URL('../../docs', import.meta.url).pathname
     }
   },
+  server: {
+    fs: {
+      allow: [
+        new URL('../..', import.meta.url).pathname
+      ]
+    }
+  },
   test: {
     environment: 'jsdom',
     include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],

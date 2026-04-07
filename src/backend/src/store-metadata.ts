@@ -23,7 +23,7 @@ const AMO_FETCH_TIMEOUT_MS = 5_000;
  * fall back to the first available locale.
  */
 const AmoLocalizedStringSchema = z
-  .union([z.string(), z.record(z.string())])
+  .union([z.string(), z.record(z.string(), z.string())])
   .optional()
   .transform((v): string | undefined => {
     if (v === undefined || v === null) return undefined;
